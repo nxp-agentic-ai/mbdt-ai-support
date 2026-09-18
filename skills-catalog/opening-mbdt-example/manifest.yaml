@@ -1,0 +1,26 @@
+# Copyright 2026 NXP
+#
+# NXP Proprietary. This software is owned or controlled by NXP and may
+# only be used strictly in accordance with the applicable license terms.
+# By expressly accepting such terms or by downloading, installing,
+# activating and/or otherwise using the software, you are agreeing that
+# you have read, and that you agree to comply with and are bound by,
+# such license terms.  If you do not agree to be bound by the applicable
+# license terms, then you may not retain, install, activate or otherwise
+# use the software.
+# manifest.yaml -- Tooling metadata for opening-mbdt-example
+schema_version: 1
+license: LA_OPT_Online Code Hosting NXP_Software_License
+scope: nxp-mbdt-cross-platform
+version: "1.0.0"
+matlab-release: ">=R2024b"
+requires-tools:
+  - get_mbdt_toolbox
+  - open_mbdt_example
+requires-skills: []
+reference-files: []
+requires-products:
+  - Simulink
+  - Embedded Coder
+  - NXP Model-Based Design Toolbox
+toolkit: mbdt-agentic-toolkit
