@@ -1,0 +1,350 @@
+{
+  "schemaVersion": "1.0.0",
+  "tools": [
+    {
+      "name": "set_mbdt_device",
+      "title": "Set NXP MBDT target device or custom hardware board on a Simulink model",
+      "description": "Changes the hardware part / MCU / configuration tool on an NXP MBDT Simulink model by driving the Configuration Parameters → Hardware → 'Select Configuration Project Template' dropdown the same way the live dialog does. Works across all NXP MBDT platforms (s32k3) because the dropdown tag, storage, callback, and entries function are looked up at runtime from the platform's codertarget parameter registry XML. Use whenever the user needs to set or change the NXP target (MCU, processor, or custom board) on a Simulink model. Returns a result struct with the previous and selected template text.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "modelName": {
+            "type": "string",
+            "description": "Simulink model name (no extension). Loaded automatically if not already in memory."
+          },
+          "platform": {
+            "type": "string",
+            "description": "MBDT platform identifier.",
+            "enum": [
+              "s32k3"
+            ]
+          },
+          "selection": {
+            "type": "string",
+            "description": "The chosen template. Either an exact dropdown label as returned by get_mbdt_toolbox(platform, 'devices') - shape '<DEVICE> <TOOL>' for standard devices (e.g. 'S32K358-Q172 S32 Config Tool') or 'Custom: <BOARD> <TOOL>' for custom boards (e.g. 'Custom: S32K312MINI-EVB EB tresos') where <TOOL> is 'S32 Config Tool' or 'EB tresos' - or a numeric 0-based index into the resolved entries (passed as a string, e.g. '0')."
+          }
+        },
+        "required": [
+          "modelName",
+          "platform",
+          "selection"
+        ]
+      }
+    },
+    {
+      "name": "detect_mbdt_params",
+      "title": "Detect the Configuration Parameters catalog (groups, tags, tooltips, widget metadata) for an MBDT platform",
+      "description": "Returns the parameter tags structure for a given NXP MBDT platform (one of s32k3). Resolves the platform's parameter registry XML via codertarget.targethardware.getTargetHardware and parses it through utils.convertParamXml, producing a struct with one field per Configuration Parameters group (e.g. Hardware, Clocking, PIL, Build, ADC, CAN_43_FLEXCAN, DIO, ...). Each group is itself a struct of parameter leaves keyed by Tag, where each leaf carries the fields the live Hardware Implementation dialog uses: Tag, Name (visible label), ToolTip (human-readable description of what the parameter does), Type (widget kind: pushbutton, combobox/dropdown/popup, checkbox, edit, ...), Entries / EntriesType (for dropdowns), Storage, Callback, Enabled, Visible, ValueType, ValueRange, etc. Use this as the single source of truth before calling set_mbdt_model_param: search Tag, Name and ToolTip to resolve user wording to a canonical (group, tag) pair; inspect Type to confirm the widget kind is supported; and read ToolTip to explain what was changed. Read-only: parses XML on disk and does not modify any model or workspace.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "platform": {
+            "type": "string",
+            "description": "MBDT platform identifier, case-insensitive. Selects the platform whose parameter registry XML is parsed.",
+            "enum": [
+              "s32k3"
+            ]
+          }
+        },
+        "required": [
+          "platform"
+        ]
+      }
+    },
+    {
+      "name": "set_mbdt_model_param",
+      "title": "Set a Hardware Implementation parameter on an NXP MBDT Simulink model",
+      "description": "Applies a Configuration Parameters value on a Simulink model that targets any NXP MBDT platform, exactly as if the user had opened the Configuration Parameters → Hardware Implementation → Target hardware resources pane and modified the field there. Drives the parameter's MBDT Callback the same way the live dialog does, so any dependent / derived fields stay coherent. Loads the model if it is not already in memory, resolves the active Simulink.ConfigSet internally, discovers the live parameter catalog via detect_mbdt_params(platform), looks up the leaf at group.tag, builds the same utils.HdlgWrapper the live dialog would use, pushes the chosen value into the widget, and fires the leaf's Callback. Supported widget kinds: pushbutton (fire the callback once, selection ignored); combobox / dropdown / popup (selection is a 0-based numeric index or an exact entry label); checkbox (selection is a logical, 0/1, or one of 'on'/'off'/'true'/'false'/'yes'/'no'/'checked'/'unchecked'). Do NOT use this tool to change the target MCU / processor / hardware part / configuration template; use set_mbdt_device for that. The model is changed in memory only; this tool does not save the model. Returns a result struct with modelName, platform, group, tag, widgetType, entries (for dropdowns), selectedIndex (0-based, or [] for pushbuttons), and selectedText ('clicked' for pushbuttons, 'on'/'off' for checkboxes, entry label for dropdowns).",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "modelName": {
+            "type": "string",
+            "description": "Simulink model name (no extension). Loaded automatically if not already in memory."
+          },
+          "platform": {
+            "type": "string",
+            "description": "MBDT platform identifier, case-insensitive. Must match the platform whose parameter catalog contains the (group, tag) being set.",
+            "enum": [
+              "s32k3"
+            ]
+          },
+          "group": {
+            "type": "string",
+            "description": "Name of the parameter group exactly as returned by detect_mbdt_params(platform). E.g. 'PIL', 'Clocking', 'Build'."
+          },
+          "tag": {
+            "type": "string",
+            "description": "Tag of the parameter leaf within the group, exactly as returned by detect_mbdt_params(platform).<group>. E.g. 'PIL_COMPort', 'PIL_Baudrate'."
+          },
+          "selection": {
+            "type": "string",
+            "description": "Widget-type-dependent selection. For dropdown / combobox / popup: a 0-based numeric index passed as a string (e.g. '1') OR an exact entry label as returned by the parameter's Entries / EntriesType callback. For checkbox: one of 'on'/'off'/'true'/'false'/'yes'/'no'/'checked'/'unchecked' (case-insensitive) or '0'/'1'. For pushbutton: omit (or pass an empty string)."
+          }
+        },
+        "required": [
+          "modelName",
+          "platform",
+          "group",
+          "tag"
+        ]
+      }
+    },
+    {
+      "name": "open_mbdt_example",
+      "title": "Copy and open an NXP MBDT shipped example",
+      "description": "Copies an NXP MBDT shipped example from the installed toolbox into a working folder and `cd`s into it, exactly as the toolbox's own `nxp.utils.openExample` would when invoked from the UI. Use this tool whenever a user asks to open, load, try, or copy an example shipped with an NXP MBDT toolbox -- never call `openexample` (or any `mbd_*.nxp.openexample` entry point) directly. Both `example` and `family` are required: `family` selects which installed MBDT toolbox the example is copied from (s32k3), and `example` must be one of the entries returned by `get_mbdt_toolbox(family, 'examples')` at runtime -- never fabricate or guess. The tool exposes two optional positional arguments: `WorkDir` (default \"matlab\" -- the sentinel value that lands the example under MATLAB's per-release examples directory, the safest cross-session default; pass an explicit folder path only when the user names a destination) and `Overwrite` (default false; pass true only when the user explicitly asks for a fresh / new / reset / default copy -- the destination is then removed and re-copied from the toolbox source, discarding any user edits).",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "example": {
+            "type": "string",
+            "description": "The canonical example base name. Must be one of the entries returned by `get_mbdt_toolbox(family, 'examples')` -- never fabricate or guess; always discover at runtime."
+          },
+          "family": {
+            "type": "string",
+            "description": "MBDT toolbox family identifier. Selects which installed MBDT toolbox the example is copied from (resolves the toolbox install root via `mbd_find_<family>_root` and the example database at <root>/mbdtbx_<family>/help/examples.xml). Must match the family the example was discovered under via `get_mbdt_toolbox(family, 'examples')`.",
+            "enum": [
+              "s32k3"
+            ]
+          },
+          "WorkDir": {
+            "type": "string",
+            "description": "Optional positional argument. Literal folder path under which a subfolder named after the example will be created (e.g. WorkDir=\"C:\\work\" -> example lands at \"C:\\work\\<example>\\\"). Pass the sentinel value \"matlab\" (the default) to land the example under MATLAB's per-release examples directory (matlab.internal.examples.getExamplesDir + 'nxp<family>'), the same location the toolbox uses by default and the safest cross-session choice. OMIT this argument (or pass \"matlab\") unless the user explicitly specifies where to drop the example. The folder is created if it does not exist; paths longer than 128 characters trigger a non-blocking length warning.",
+            "default": "matlab"
+          },
+          "Overwrite": {
+            "type": "boolean",
+            "description": "Optional positional argument. When true, an existing copy at <WorkDir>/<example> is removed and re-copied from the toolbox source (a 'fresh' / 'default' example). When false (default), an existing copy is reused as-is, preserving any user edits saved into that folder. Set true ONLY when the user explicitly asks for a fresh, new, reset, clean, or default copy of the example; otherwise omit it.",
+            "default": false
+          }
+        },
+        "required": [
+          "example",
+          "family"
+        ]
+      }
+    },
+    {
+      "name": "get_mbdt_board_init",
+      "title": "Read the Board Initialization sequence of an NXP MBDT Simulink model",
+      "description": "Returns the ordered component initialization sequence that will be emitted into mbdt_board_init.c at build time. Auto-detects the MBDT platform (s32k3) from the model's coder target, reads the live sequence from the in-memory nxp.settings store, and falls back to the platform's gen_default_sequence(hCS) when the model has never been customized. The model is loaded if needed and made the current system; never modified. Returns a struct with modelName, platform, source ('customized' / 'default'), components (struct array with Name, Priority, Enabled, Header cellstr, Code cellstr, Tokens cellstr), and gui_open (true when a Board Initialization AppDesigner figure is currently open against this model). The first component (Name='Skipped', Priority=-Inf, Enabled=false) is a sentinel and is never emitted; iterate from index 2. The optional 'detail' parameter additionally prints a human-readable view of the sequence to stdout so the calling agent can see contents without a follow-up evaluate_matlab_code unfold step: 'summary' (default) prints a compact one-row-per-component table (Index, Priority, Enabled, Name, #Code, #Header) -- cheap on context and enough for structural edits (toggle Enabled, change Priority, add to Header); 'full' prints the summary table plus every component's full Header list and Code cellstr line-by-line -- use when mutating Code contents (insertion, deletion, mid-block splicing); 'component' prints just the Header and Code of the one component named by 'componentName' -- cheapest way to see one component's full contents when the agent already knows which one to edit; 'none' suppresses the print entirely. The returned struct is byte-identical regardless of 'detail' -- it is a print-only side-effect. Use this BEFORE every call to set_mbdt_board_init to discover legal component Names; never carry component names, priorities, or default code from memory.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "modelName": {
+            "type": "string",
+            "description": "Simulink model name (no extension). Loaded automatically if not already in memory."
+          },
+          "detail": {
+            "type": "string",
+            "description": "Verbosity of the human-readable view printed to stdout as a side-effect of the call. The returned struct is byte-identical regardless. 'summary' (default) prints a compact one-row-per-component table (Index, Priority, Enabled, Name, #Code, #Header); 'full' prints the summary table plus every component's Header list and Code cellstr line-by-line; 'component' prints just one component's Header + Code (requires 'componentName'); 'none' prints nothing. Pick 'summary' for structural edits, 'full' when about to mutate Code lines and the target component is not yet known, 'component' when the target is known (cheapest), 'none' when the caller has already printed the sequence earlier in the same turn.",
+            "enum": [
+              "summary",
+              "full",
+              "component",
+              "none"
+            ],
+            "default": "summary"
+          },
+          "componentName": {
+            "type": "string",
+            "description": "Name of the single component to print when detail='component' (e.g. 'Mcu', 'Port', 'Adc'). Must match one of the Names in the live sequence; raises get_mbdt_board_init:UnknownComponentName otherwise. Required when detail='component'; ignored otherwise. Default is the empty string.",
+            "default": ""
+          }
+        },
+        "required": [
+          "modelName"
+        ]
+      }
+    },
+    {
+      "name": "get_mbdt_toolbox",
+      "title": "Inspect an installed NXP MBDT toolbox for a family -- overview, blocks, devices, examples, or all",
+      "description": "Returns a snapshot of an installed NXP MBDT toolbox for the given family ('s32k3'). Choose a section: 'overview' (install paths and versions), 'blocks' (Simulink library), 'devices' (MCU targets), 'examples' (shipped models), or 'all'. Use this before setting the target MCU, opening an example, adding/configuring an MBDT block, or finding out which toolchain packages (S32CT, RTD, etc.) are installed and where.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "mbdt_toolbox_family": {
+            "type": "string",
+            "description": "MBDT toolbox family identifier.",
+            "enum": [
+              "s32k3"
+            ]
+          },
+          "section": {
+            "type": "string",
+            "description": "Which section of information to return. When 'all', sections are concatenated with '<FAMILY> <Section>:' header lines (e.g. 'S32K3 Overview:').",
+            "enum": [
+              "overview",
+              "blocks",
+              "devices",
+              "examples",
+              "all"
+            ]
+          }
+        },
+        "required": [
+          "mbdt_toolbox_family",
+          "section"
+        ]
+      }
+    },
+    {
+      "name": "set_mbdt_board_init",
+      "title": "Edit one field of one component in the Board Initialization sequence",
+      "description": "Edits or inserts a component in an NXP MBDT Simulink model's Board Initialization sequence (the ordered list of init calls emitted into mbdt_board_init.c at build time). In EDIT mode (field in {Code, Header, Enabled, Priority}): targets ONE existing component identified by componentName and overwrites ONE field of it; every other component, the Skipped sentinel, every Tokens map, and every other field of the targeted component are preserved verbatim. In INSERT mode (field=Insert): APPENDS a brand-new entry, mirroring the Board Initialization GUI's 'Add' button. Two cases: (1) componentName='Custom' (unlimited copies allowed) -- valueJson is {Code:[...] required, Header:[...] optional, Priority:<num|'Inf'> optional default Inf}; (2) any other catalog component such as Messaging/Adc/Gpt -- the name must be in the platform's BoardInitData catalog AND in the model's epcStruct (the configured S32CT/Tresos project), AND not already in the sequence; Code/Header/Tokens come from the catalog (passing them is an error), and valueJson may be '{}' or {Priority:<num|'Inf'>} to override the catalog default. Use this whenever the user asks to edit, add, insert, remove, or replace lines in a component's emitted C code, change its #include list, enable/disable a component, reorder a component by changing its Priority, or add a new initialization block. After every write the sequence is canonicalized: the Skipped sentinel is pinned at index 1, the remaining components are sorted by Priority ascending, and ties on Priority are broken alphabetically by Name. Empty / NaN Priorities are promoted to Inf before sorting. The model is saved with save_system after the edit so the change survives a MATLAB restart. Typical workflow: call get_mbdt_board_init to discover valid component Names and current Code/Header/Priority, then call set_mbdt_board_init with the new value. When multiple entries share the name 'Custom', non-Insert edits target the first occurrence in storage order and emit set_mbdt_board_init:AmbiguousName -- use distinct Priorities for distinct Custom entries you intend to address individually. Returns a struct with modelName, platform, componentName, field, applied=true, and (for Insert) insertedPriority and insertedIndex.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "modelName": {
+            "type": "string",
+            "description": "Simulink model name (no extension). Loaded automatically if not already in memory."
+          },
+          "componentName": {
+            "type": "string",
+            "description": "Name of the component whose field will be overwritten, exactly as returned by get_mbdt_board_init (e.g. 'Mcu', 'Port', 'Adc'). Must exist in the current sequence."
+          },
+          "field": {
+            "type": "string",
+            "description": "Which operation to perform. 'Code' replaces the emitted C body (one string per line). 'Header' replaces the .h include list. 'Enabled' flips the component on/off. 'Priority' changes the component's emit order; after the write the whole sequence is re-sorted ascending by Priority with alphabetical Name tie-break. 'Insert' APPENDS a brand-new entry: componentName='Custom' adds an unlimited freeform block (Code required), any other catalog name (Messaging, Adc, Gpt, ...) adds a catalog component that must be present in the model's epcStruct and not already in the sequence.",
+            "enum": ["Code", "Header", "Enabled", "Priority", "Insert"]
+          },
+          "valueJson": {
+            "type": "string",
+            "description": "New value for the chosen field, serialized as a string. For field='Code' or field='Header', this MUST be a JSON array of strings, one string per line / per #include (e.g. '[\"Mcu_Init(&Mcu_Config);\",\"/* comment */\"]'). For field='Enabled', pass the literal string 'true' or 'false' (with or without surrounding quotes, case-insensitive). For field='Priority', pass a JSON number (e.g. '5', '-3.5') or the string 'Inf' (with or without surrounding quotes, case-insensitive). Lower priorities are emitted first; Inf is the convention for Custom blocks at the tail. -Inf is reserved for the Skipped sentinel and is rejected for any other component; NaN, non-real, and non-scalar values are also rejected. For field='Insert', pass a JSON OBJECT. If componentName='Custom': {\"Code\":[\"line1\",...] (required), \"Header\":[\"hdr.h\",...] (optional, default []), \"Priority\":37 or \"Inf\" (optional, default Inf)}. If componentName is a catalog name (e.g. 'Messaging', 'Adc'): pass '{}' for catalog defaults, or {\"Priority\":<num|\"Inf\">} to override the catalog priority -- Code/Header must NOT be passed (they come from the catalog)."
+          }
+        },
+        "required": [
+          "modelName",
+          "componentName",
+          "field",
+          "valueJson"
+        ]
+      }
+    }
+  ],
+  "signatures": {
+    "set_mbdt_device": {
+      "function": "set_mbdt_device",
+      "input": {
+        "order": [
+          "modelName",
+          "platform",
+          "selection"
+        ]
+      }
+    },
+    "detect_mbdt_params": {
+      "function": "detect_mbdt_params",
+      "input": {
+        "order": [
+          "platform"
+        ]
+      }
+    },
+    "set_mbdt_model_param": {
+      "function": "set_mbdt_model_param",
+      "input": {
+        "order": [
+          "modelName",
+          "platform",
+          "group",
+          "tag",
+          "selection"
+        ]
+      }
+    },
+    "open_mbdt_example": {
+      "function": "open_mbdt_example",
+      "input": {
+        "order": [
+          "example",
+          "family",
+          "WorkDir",
+          "Overwrite"
+        ]
+      }
+    },
+    "get_mbdt_board_init": {
+      "function": "get_mbdt_board_init",
+      "input": {
+        "order": [
+          "modelName",
+          "detail",
+          "componentName"
+        ],
+        "nameValue": [
+          "detail",
+          "componentName"
+        ],
+        "nameValueNames": {
+          "detail": "Detail",
+          "componentName": "ComponentName"
+        }
+      }
+    },
+    "set_mbdt_board_init": {
+      "function": "set_mbdt_board_init",
+      "input": {
+        "order": [
+          "modelName",
+          "componentName",
+          "field",
+          "valueJson"
+        ]
+      }
+    },
+    "get_mbdt_toolbox": {
+      "function": "get_mbdt_toolbox",
+      "input": {
+        "order": [
+          "mbdt_toolbox_family",
+          "section"
+        ]
+      }
+    }
+  }
+}
