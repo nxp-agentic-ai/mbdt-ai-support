@@ -4,7 +4,7 @@ description: "Use when the user asks to generate code, build, compile, rebuild, 
 license: LA_OPT_Online Code Hosting NXP_Software_License
 metadata:
   author: NXP
-  version: "1.0.0"
+  version: "1.1.0"
   product: nxp-mbdt
   tags: '[mbdt, build, deploy]'
 ---
@@ -102,4 +102,3 @@ If Levels 1 and 2 both failed, surface the original `slbuild` error to the user.
 - `setting-mbdt-target-mcu` -- change the target MCU before building.
 - `opening-mbdt-example` -- open a shipped example already configured for Build.
 
----

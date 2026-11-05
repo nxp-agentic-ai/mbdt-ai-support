@@ -7,8 +7,7 @@ resource hierarchy, the initialize-then-convert runtime pattern, the
 per-group / CTU notification ISR wiring, and the external-config-tool
 dependencies. The behavioral model is expected to hold cross-family
 (S32K3); exact enum labels and board-init
-symbols may differ per family and are verified only on S32K3 (RTD,
-MATLAB R2026a). Sections run in order: *what ADC is* -> *block model* ->
+symbols may differ per family and are verified only on S32K3. Sections run in order: *what ADC is* -> *block model* ->
 *config tool* -> *board init* -> *buffer setup* -> *runtime* ->
 *interrupts*, then correlation matrix, troubleshooting, and guardrails.
 
@@ -50,7 +49,7 @@ and referenced by name; later sections do not re-derive them.
   unit / trigger / FIFO enums.
 
 > **Tip -- start from a shipped example.** Open a shipped ADC example via
-> [`opening-mbdt-example`](../../../opening-mbdt-example/SKILL.md); its
+> [`opening-mbdt-example`](../../opening-mbdt-example/SKILL.md); its
 > `.mex` project (Pins -> ADC channels, Peripherals -> Adc, Peripherals ->
 > Mcl for CTU / DMA, Platform -> NVIC) plus its model (board init,
 > Initialize Function with `Adc_SetupResultBuffer`, top-level
@@ -293,7 +292,8 @@ leaves it on a stale hidden slot and the model is incoherent.
 | `Mcl` (optional) | `{family}_mcl` | Enables the LCU sync output / DMA that arms a TRGMUX/LCU/BCTU trigger chain -- **not** an `Adc` block |
 | `FreeMASTER Config` (optional) | `{family}_fm_config` | Plots converted results over serial -- **not** an `Adc` block |
 
-Discover exact paths via `detect_mbdt_blocks({family})`. A group-based
+
+Discover exact paths via `get_mbdt_toolbox({family}, 'blocks')`. A group-based
 interrupt model places **one** ISR-handler block per group notification
 in use; a CTU model places one per CTU / FIFO notification in use.
 
@@ -358,7 +358,7 @@ require NVIC enablement.
 
 ### 4.5 Board Initialization (Simulink model)
 
-Add via [`editing-mbdt-board-init`](../../../editing-mbdt-board-init/SKILL.md):
+Add via [`editing-mbdt-board-init`](../../editing-mbdt-board-init/SKILL.md):
 
 ```
 Component : Adc
@@ -371,7 +371,7 @@ Code      : Adc_Init(&Adc_Config);
 AUTOSAR standard driver (`mode = autosar` in the `.mex`). `Adc_Config` is
 emitted by the code-gen tool from Peripherals -> Adc. Priority 50 is the
 default emitted for the shipped examples -- verify live via
-`get_mbdt_board_init({family})`.
+`get_mbdt_board_init({model})`.
 
 #### Expected generated C files (ADC)
 
@@ -656,43 +656,25 @@ xref inspection.
 - **Group-to-HW-unit binding is config-tool-owned** (INV-1). The block
   sees `AdcHwUnit_N` and the application group names; the channel list and
   trigger source behind each group live in the config tool.
-- **Cross-family portability.** The behavioral model (the live-discovered
-  `api_func` set, the HW-unit -> group -> channel hierarchy,
-  INV-1/INV-2/INV-3, per-group end notifications, CTU mode with its BCTU
-  enums, ISR routing through the family handler) is expected to hold on. Family-specific differences to discover live:
-  - board-init component name (`Adc`) / header (`Adc.h`) -- via
-    `get_mbdt_board_init({family})`;
+- **Board-init component.** Confirm the component name (`Adc`) and
+  header (`Adc.h`) live via `get_mbdt_board_init({model})`.
 
 ---
 
 ## 11. Guardrails (ADC-specific)
 
-- **Never stub ADC functions.** Do not hand-write `Adc_Init`,
-  `Adc_SetupResultBuffer`, `Adc_StartGroupConversion`, `Adc_ReadGroup`,
-  any `Adc_*Notification`, or any RTD function into generated C. The
-  board-init entry (Sec.4.5) is what triggers MBDT to generate the driver
-  code.
-- **Never invent HW-unit / Group / Channel / BCTU names** (INV-1).
-  `AdcHwUnit_0`, `BctuHwUnit_0`, `AdcHwTrigger_0`, `BctuResultFifos_0` are
-  exact strings from the config tool; group and channel names are
-  application-chosen and vary per project. Read them all from the block's
-  live enums.
-- **`Adc_SetupResultBuffer` is mandatory before any conversion** (INV-2).
-  Without it the driver has no buffer to fill; `Adc_ReadGroup` returns
-  undefined data and (in interrupt mode) the notification never fires.
-  This is a runtime silence, not a build error.
-- **Start conversions and read results against a Group, not a Channel**
-  (INV-1). `Adc_StartGroupConversion` / `Adc_ReadGroup` take `group`; the
-  `channel` enum is only for the per-channel functions (`Adc_EnableChannel`,
+Generic block rules (no stubs, no invented names, interrupts only via the
+ISR-handler block, `api_func` first, never set `text`) are in
+[`../SKILL.md`](../SKILL.md); only ADC-specific rules follow.
+
+- **Call `Adc_SetupResultBuffer` before any conversion (INV-2).** Without it
+  `Adc_ReadGroup` returns undefined data and the interrupt-mode notification
+  never fires -- a runtime silence, not a build error.
+- **Start and read conversions against a Group, not a Channel (INV-1).**
+  `Adc_StartGroupConversion` / `Adc_ReadGroup` take `group`; the `channel`
+  enum is only for per-channel functions (`Adc_EnableChannel`,
   `Adc_ReadRawData`, ...).
-- **Match the trigger `api_func` to the group's configured trigger
-  source.** A software-triggered group uses `Adc_StartGroupConversion`; a
-  hardware-triggered group uses `Adc_EnableHardwareTrigger`; a
-  CTU-triggered group uses the CTU family. Mixing them silently
-  misbehaves.
-- **Never route an ADC notification through a parameter on the `Adc`
-  block** (INV-3). All ADC notifications (group-end, CTU, FIFO) go through
-  the `Hardware_Interrupt_Handler` block , and
-  `irqHandlers` must be the exact live notification name.
-- **Set `api_func` first**, before any resource enum.
-- **Never set `text` on any `Adc` block** -- system-managed.
+- **Match the trigger `api_func` to the group's configured trigger source.**
+  Software trigger -> `Adc_StartGroupConversion`, hardware trigger ->
+  `Adc_EnableHardwareTrigger`, CTU trigger -> the CTU family; mixing them
+  silently misbehaves.

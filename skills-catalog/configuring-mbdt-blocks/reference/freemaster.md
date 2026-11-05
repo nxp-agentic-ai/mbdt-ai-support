@@ -3,7 +3,7 @@
 Reference for adding FreeMASTER observability to any NXP MBDT model.
 Covers `FreeMASTER Config`, `FreeMASTER Recorder`, and `FreeMASTER
 Poll`. Cross-family (S32K3); enum labels
-differ per family. Verified live on S32K3.
+differ per family.
 
 ## The 4 FreeMASTER invariants
 
@@ -42,7 +42,7 @@ differ per family. Verified live on S32K3.
   on a chosen rate. The `FreeMASTER Recorder` block is also optional.
 
 > **Tip.** Open a shipped example via
-> [`opening-mbdt-example`](../../../opening-mbdt-example/SKILL.md).
+> [`opening-mbdt-example`](../../opening-mbdt-example/SKILL.md).
 > Verify against a current model via
 > `get_param(.., 'DialogParameters')` -- never carry names from memory.
 
@@ -129,7 +129,7 @@ force an additional service call on a chosen rate. No parameters.
 
 Add the peripheral board-init entry (`Uart_Init` or
 `Can_43_FLEXCAN_Init`) via
-[`editing-mbdt-board-init`](../../../editing-mbdt-board-init/SKILL.md).
+[`editing-mbdt-board-init`](../../editing-mbdt-board-init/SKILL.md).
 
 FreeMASTER itself has no board-init entry and no
 `Hardware_Interrupt_Handler` -- it hooks the peripheral's ISR
@@ -259,22 +259,22 @@ carries only the underlying Uart / Can peripheral.
 
 ---
 
-## 8. Guardrails
+## 8. Guardrails (FreeMASTER-specific)
 
-- Never look for a FreeMASTER component in the config tool (INV-1).
-- Never add `FreeMASTER_Init` to `mbdt_board_init.c` -- the block
-  emits it. Only the underlying peripheral needs a board-init entry.
-- Exactly one `FreeMASTER Config` block per model; never mix `Serial`
+Generic block rules (no stubs, no invented names, interrupts only via the
+ISR-handler block, `api_func` first, never set `text`) are in
+[`../SKILL.md`](../SKILL.md); only FreeMASTER-specific rules follow.
+
+- **Never look for a FreeMASTER component in the config tool (INV-1).**
+- **Never add `FreeMASTER_Init` to `mbdt_board_init.c`.** The block emits it;
+  only the underlying peripheral needs a board-init entry.
+- **Use exactly one `FreeMASTER Config` block per model.** Never mix `Serial`
   and `CAN` on it.
-- Match `baudrate` on the block to the S32CT Uart baud -- the block
-  does not program the peripheral.
-- `FreeMASTER Poll` and `FreeMASTER Recorder` are optional; see
-  INV-4 and Sec 2.2 for placement rules.
-- Never set `text` -- system-managed.
-- Any variable to be observed / tuned from the FreeMASTER host must
-  be emitted as a standalone symbol in the ELF. Give the
-  corresponding Simulink signal, block output, or parameter a
-  storage class of `ExportedGlobal` (or `Volatile`) via the data
-  object / Model Explorer -- otherwise Embedded Coder folds it into
-  `rtB` / `rtDW` / `rtP` structures (or optimises it away) and the
-  host will not find it by name.
+- **Match `baudrate` on the block to the S32CT Uart baud.** The block does not
+  program the peripheral.
+- **Place `FreeMASTER Poll` and `FreeMASTER Recorder` per INV-4 and Sec 2.2.**
+  Both are optional.
+- **Give every observed or tuned signal / parameter the `ExportedGlobal` (or
+  `Volatile`) storage class.** Otherwise Embedded Coder folds it into
+  `rtB` / `rtDW` / `rtP` (or optimizes it away) and the host cannot find it
+  by name in the ELF.

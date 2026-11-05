@@ -48,7 +48,7 @@ and referenced by name; later sections do not re-derive them.
   `callback_*` parameter on `{family}_pwm`.
 
 > **Tip -- start from a shipped example.** Open a shipped PWM example via
-> [`opening-mbdt-example`](../../../opening-mbdt-example/SKILL.md); its
+> [`opening-mbdt-example`](../../opening-mbdt-example/SKILL.md); its
 > `.mex` project (Pins -> eMIOS channel outputs, Peripherals -> Pwm,
 > Peripherals -> Mcl for eMIOS master-bus / TRGMUX / LCU routing,
 > Platform -> NVIC) plus its model (board init, top-level
@@ -271,7 +271,8 @@ leaves it on a stale hidden slot and the model is incoherent.
 | `Mcl` (optional) | `{family}_mcl` | Enables the eMIOS/LCU sync output that arms a TRGMUX/LCU/BCTU trigger chain -- **not** a `Pwm` block |
 | `FreeMASTER Config` (optional) | `{family}_fm_config` | Plots / tunes duty over serial -- **not** a `Pwm` block |
 
-Discover exact paths via `detect_mbdt_blocks({family})`. An
+
+Discover exact paths via `get_mbdt_toolbox({family}, 'blocks')`. An
 edge-interrupt model places **one** ISR-handler block per channel
 notification in use.
 
@@ -332,7 +333,7 @@ enablement.
 
 ### 4.5 Board Initialization (Simulink model)
 
-Add via [`editing-mbdt-board-init`](../../../editing-mbdt-board-init/SKILL.md):
+Add via [`editing-mbdt-board-init`](../../editing-mbdt-board-init/SKILL.md):
 
 ```
 Component : Pwm
@@ -345,7 +346,7 @@ Code      : Pwm_Init(&Pwm_Config);
 AUTOSAR standard driver (`mode = autosar` in the `.mex`). `Pwm_Config` is
 emitted by the code-gen tool from Peripherals -> Pwm. Priority 100 is the
 default emitted for the shipped example -- verify live via
-`get_mbdt_board_init({family})`.
+`get_mbdt_board_init({model})`.
 
 #### Expected generated C files (PWM)
 
@@ -598,7 +599,7 @@ config-tool-owned and visible only via `.mex` xref inspection.
   the family handler, PWM as an ADC trigger source via Mcl). Family-specific differences to
   discover live:
   - board-init component name (`Pwm`) / header (`Pwm.h`) -- via
-    `get_mbdt_board_init({family})`;
+    `get_mbdt_board_init({model})`;
   - the timer that backs PWM -- other families may use a different timer
     IP than eMIOS, changing the `moduleId` labels and the
     `{IP}_Pwm_Ip_Cfg.*` generated-file name;
@@ -607,31 +608,20 @@ config-tool-owned and visible only via `.mex` xref inspection.
 
 ## 11. Guardrails (PWM-specific)
 
-- **Never stub PWM functions.** Do not hand-write `Pwm_Init`,
-  `Pwm_SetDutyCycle`, `Pwm_SetPeriodAndDuty`, any `Pwm_*Notification`, or
-  any RTD function into generated C. The board-init entry (Sec.4.5) is
-  what triggers MBDT to generate the driver code.
-- **Never invent channel / eMIOS-instance names** (INV-1).
-  `PWM_EMIOS_INSTANCE_0`, `PWM_RISING_EDGE`, `PWM_PRIMARY_PRESCALER` are
-  exact strings from the config tool; channel names (`PwmChannel_N`) are
-  application-chosen and vary per project. Read them all from the block's
-  live enums.
-- **Drive duty/period against a Channel.** `Pwm_SetDutyCycle` /
-  `Pwm_SetPeriodAndDuty` take `channel`; the `moduleId` enum is only for
-  the instance-scoped / sync / fast-update functions.
+Generic block rules (no stubs, no invented names, interrupts only via the
+ISR-handler block, `api_func` first, never set `text`) are in
+[`../SKILL.md`](../SKILL.md); only PWM-specific rules follow.
+
+- **Drive duty / period against a Channel.** `Pwm_SetDutyCycle` /
+  `Pwm_SetPeriodAndDuty` take `channel`; the `moduleId` enum is only for the
+  instance-scoped / sync / fast-update functions.
 - **Match the update function to the channel's configured mode.** A
   fixed-period channel takes `Pwm_SetDutyCycle`; only a variable-period
-  channel responds to `Pwm_SetPeriodAndDuty`. For glitch-free
-  multi-channel updates use the `_NoUpdate` variants plus one
-  `Pwm_SyncUpdate` (Sec.6.3).
-- **No init-function block is mandatory** (INV-2); add
+  channel responds to `Pwm_SetPeriodAndDuty`. For glitch-free multi-channel
+  updates use the `_NoUpdate` variants plus one `Pwm_SyncUpdate` (Sec.6.3).
+- **No init-function block is mandatory (INV-2).** Add
   `Pwm_EnableNotification` only for edge-interrupt designs.
-- **Never route a PWM notification through a parameter on the `Pwm`
-  block** (INV-3). All PWM edge notifications go through the
-  `Hardware_Interrupt_Handler` block), and
-  `irqHandlers` must be the exact live `PwmChannel_N_Callback` name.
-- **PWM-as-trigger-source routing lives in Mcl, not Pwm.** The
-  TRGMUX -> LCU -> BCTU -> ADC chain is owned by the Mcl driver; do not
-  look for it on the `Pwm` block.
-- **Set `api_func` first**, before any resource enum.
-- **Never set `text` on any `Pwm` block** -- system-managed.
+- **Select the edge notification as the exact live `PwmChannel_N_Callback`
+  entry in `irqHandlers` (INV-3).**
+- **Look for PWM-as-trigger-source routing in Mcl, not on the `Pwm` block.**
+  The TRGMUX -> LCU -> BCTU -> ADC chain is owned by the Mcl driver.

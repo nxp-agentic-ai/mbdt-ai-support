@@ -18,7 +18,7 @@ setup.
 > for DMA, Interrupt Controller) and its Simulink model (board init,
 > initialize function, callback subsystem, ISR wiring) already form a
 > coherent end-to-end setup. Examples are listed and opened via the
-> [`opening-mbdt-example`](../../../opening-mbdt-example/SKILL.md)
+> [`opening-mbdt-example`](../../opening-mbdt-example/SKILL.md)
 > skill; never carry example names from memory -- discover them at
 > runtime.
 
@@ -179,7 +179,8 @@ One `set_param` per parameter.
 | `Hardware_Interrupt_Handler` | `{family}_isr_handler` | Routes the single `MBDT_Uart_Callback` into a function-call subsystem (async / buffer / DMA modes) |
 | `FreeMASTER Config` (optional) | `{family}_fm_config` | Reserves an LPUART for FreeMASTER-over-serial -- **not** a `Uart` block |
 
-Discover exact paths via `detect_mbdt_blocks({family})`.
+
+Discover exact paths via `get_mbdt_toolbox({family}, 'blocks')`.
 
 ---
 
@@ -244,7 +245,7 @@ Sync-only mode does not need NVIC enablement.
 ### 4.5 Board Initialization (Simulink model)
 
 Add the UART driver init to `mbdt_board_init.c` via the
-[`editing-mbdt-board-init`](../../../editing-mbdt-board-init/SKILL.md)
+[`editing-mbdt-board-init`](../../editing-mbdt-board-init/SKILL.md)
 skill:
 
 ```
@@ -683,30 +684,33 @@ block in the model.**
 - **LPUART pin assignments vary per board.** `lpuart3_rx/tx` on S32K344-Q257 = `PTE15/PTE16`, but this differs on other packages. Discover from the model's `.mex` via `nxp_s32ct_inspect(kind='pins')`.
 - **Channel-to-LPUART mapping is config-tool-owned.** The block sees only `UartChannel_0/1/2`; which physical LPUART is behind each is `UartChannelId` in the config tool. Do not assume `UartChannel_0` = LPUART0.
 - **Some boards use LPUART for their debug console.** For example, a board may route UART to an on-board USB-serial converter -- verify the pin mapping matches the board schematic before deploying.
-- **Cross-family portability.** The block behavioral model (the `api_func` function set discovered live, single ISR callback, sync/async/buffer/DMA modes) is expected to hold on S32K3, but the board-init component name (`Uart`) and the header (`CDD_Uart.h`) may differ. On some families the CDD Uart wrapper is named `Uart_43_LPUART` instead. Discover live via `get_mbdt_board_init({family})`.
+- **Board-init component.** Confirm the component name (`Uart`) and the header (`CDD_Uart.h`) live via `get_mbdt_board_init({model})`; some toolbox versions name the wrapper `Uart_43_LPUART` instead.
 - **No transceiver init exists for UART.** Unlike CAN (Sec.7 of the CAN reference), UART uses LPUART pins directly -- there is no external transceiver chip requiring GPIO wake-up or a helper C library. If a user asks about "UART transceiver initialization", the answer is "not applicable -- that is a CAN concept".
 
 ---
 
-## 12. Guardrails (UART-specific -- supersedes nothing in parent SKILL.md)
+## 12. Guardrails (UART-specific)
 
-- **Never stub UART functions.** Do not hand-write `Uart_Init`, `Uart_AsyncSend`, `Uart_SetBuffer`, `MBDT_Uart_Callback`, or any other Real-Time Driver function into generated C, the model, or a hand-written .c file. Adding the board-init entry (Sec.4.5) is what triggers MBDT to generate the driver code. If the build reports a missing UART symbol, the fix is **always** in the config tool or the board-init entry.
+Generic block rules (no stubs, no invented names, interrupts only via the
+ISR-handler block, `api_func` first, never set `text`) are in
+[`../SKILL.md`](../SKILL.md); only UART-specific rules follow.
 
-- **Never invent channel names.** `UartChannel_0`, `UartChannel_1`, `UartChannel_2` are exact strings owned by the config tool's Peripherals -> Uart section. Read them from the block's live `Enum`; if the string is not present, open the config tool.
-
-
-- **`transfer_type` is meaningful only on `Uart_SetBuffer`.** Setting it on any other `api_func` is silently ignored; do not treat the default (`UART_SEND`) as significant on `Uart_SyncSend` etc.
-
-- **The `timeout` parameter on `Uart_SyncSend` / `Uart_SyncReceive` must be a positive integer (e.g. `10000`).** On async functions it is silently ignored. Zero is not a valid parameter value for sync functions and must be rejected before any code is emitted. See also Sec.2.2 and the troubleshooting table (Sec.10).
-
-- **`baudrate` on the block is meaningful only on `Uart_SetBaudrate`.** The initial baud rate is compiled into the driver's config structure from the config tool; changing `baudrate` on `Uart_AsyncSend` etc. has no runtime effect.
-
-- **Never route the UART callback through a parameter on the `Uart` block.** No `isr_*`, `callback_*`, or `notification_*` parameter exists on `{family}_uart`. All UART callbacks go through the `Hardware_Interrupt_Handler` block (`ISR Handler` on S32N) with `irqGroup = Uart, irqHandlers = MBDT_Uart_Callback` -- the **only** entry in the enum for the Uart group.
-
-- **Never set `text` on any `Uart` block.** It is system-managed (cached dump of the config tree, regenerated on the next mask refresh).
-
-- **When multiple channels are active, still use exactly one ISR handler.** The single `MBDT_Uart_Callback` handles all UART events for all channels; the callback subsystem demuxes by event code and (optionally) by the channel-ID output on port 2. Do not add a second ISR handler for a second channel -- the enum has no second entry to select.
-
-- **Verify LPUART instance exclusivity.** The LPUART number backing a `UartChannel_*` (via `UartChannelId`) must not also appear as the `instance` of a `FreeMASTER Config` block. Sharing an LPUART between the Uart CDD and the FreeMASTER driver produces undefined behavior.
-
-- **`Uart_AsyncReceive` in the Initialize Function is not optional in async mode.** Without a priming async-receive call, the driver has no buffer to fill and the ISR never fires. The model will link cleanly and appear to run -- but the callback subsystem will never execute.
+- **`transfer_type` matters only on `Uart_SetBuffer`.** It is silently ignored
+  on every other `api_func`; its default (`UART_SEND`) is not significant on
+  `Uart_SyncSend` etc.
+- **Give `Uart_SyncSend` / `Uart_SyncReceive` a positive integer `timeout`
+  (e.g. `10000`).** Zero is invalid and must be rejected before any code is
+  emitted; async functions ignore it (Sec.2.2, Sec.10).
+- **`baudrate` on the block matters only on `Uart_SetBaudrate`.** The initial
+  baud rate is compiled in from the config tool; changing it on other
+  functions has no runtime effect.
+- **Use exactly one ISR-handler block, `irqGroup = Uart`,
+  `irqHandlers = MBDT_Uart_Callback`, even with several channels.** It is the
+  only entry in the Uart group; the callback subsystem demuxes by event code
+  and (optionally) by the channel-ID output on port 2.
+- **Never share an LPUART between a `UartChannel_*` and a `FreeMASTER Config`
+  block.** The LPUART behind `UartChannelId` must not also be the FreeMASTER
+  `instance`; sharing it is undefined behavior.
+- **Prime reception with `Uart_AsyncReceive` in the Initialize Function in
+  async mode.** Without it the driver has no buffer, the ISR never fires, and
+  the model links and runs with a dead callback subsystem.

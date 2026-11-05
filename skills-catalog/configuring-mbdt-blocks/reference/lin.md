@@ -8,7 +8,7 @@ examples shipped with the family MBDT toolbox are a good starting point
 for confirming block behavior, wiring, and config-tool setup.
 
 > **Tip -- start from a shipped example.** Open a shipped LIN example
-> via [`opening-mbdt-example`](../../../opening-mbdt-example/SKILL.md);
+> via [`opening-mbdt-example`](../../opening-mbdt-example/SKILL.md);
 > its `.mex` project (Pins -> LPUART/FLEXIO, Peripherals -> Lin +
 > Peripherals -> LinIf, Platform -> NVIC) plus its model (Initialize
 > Function per-channel wakeup, top-level Lin_SendFrame, LinIf callback
@@ -384,7 +384,7 @@ FLEXIO_IRQn                       (for FLEXIO-backed channels)
 
 ### 5.5 Board Initialization (Simulink model)
 
-Add via [`editing-mbdt-board-init`](../../../editing-mbdt-board-init/SKILL.md):
+Add via [`editing-mbdt-board-init`](../../editing-mbdt-board-init/SKILL.md):
 
 ```
 Component : Lin_43_LPUART_FLEXIO
@@ -684,28 +684,34 @@ Not seen in isolation in the shipped examples, but derivable from Sec.10.2 by re
   - `DioLed1` -- Slave accepted a header (LinIf response OK)
   - `DioLed2` -- Master TX success (Lin_GetStatus == LIN_TX_OK)
 
-- **Cross-family portability:** the split (`Lin` block + `LinIf` block, no `Hardware_Interrupt_Handler`) is expected to hold on other MBDT families. The board-init component name (`Lin_43_LPUART_FLEXIO`) may differ -- e.g. a family without FLEXIO might use `Lin_43_LPUART` alone. Discover live via `get_mbdt_board_init({family})`.
+- **Cross-family portability:** the split (`Lin` block + `LinIf` block, no `Hardware_Interrupt_Handler`) is expected to hold on other MBDT families. The board-init component name (`Lin_43_LPUART_FLEXIO`) may differ -- e.g. a family without FLEXIO might use `Lin_43_LPUART` alone. Discover live via `get_mbdt_board_init({model})`.
 
 ---
 
 ## 13. Guardrails (LIN-specific)
 
-- **Never stub LIN functions.** Do not hand-write `Lin_43_LPUART_FLEXIO_Init`, `Lin_SendFrame`, `LinIf_HeaderIndication`, or any RTD/LinIf function into generated C. The board-init entry (Sec.5.5) is what triggers MBDT to generate the driver code. Both `Lin_43_LPUART_FLEXIO.h` and `LinIf.h` must be in the entry's header list.
+Generic block rules (no stubs, no invented names, interrupts only via the
+ISR-handler block, `api_func` first, never set `text`) are in
+[`../SKILL.md`](../SKILL.md); only LIN-specific rules follow.
 
-- **Never invent channel names.** `LinChannel_0`, `LinChannel_1` are exact strings from the config tool. Read them from the block's live `Enum`.
-
-- **Never route a LIN callback through `Hardware_Interrupt_Handler`.** LIN does not use it. Every LIN callback (`LinIf_HeaderIndication` and its 5 siblings) goes through a standalone `s32k3_linif` block. If a user says "add an ISR handler for LIN header indication", the correct action is to add a `LinIf` block, not a `Hardware_Interrupt_Handler`.
-
-- **Never omit the `Lin_WakeUpInternal` + `Lin_CheckWakeUp` pair in Initialize Function.** Without them, the channel stays in Sleep and `Lin_SendFrame` returns E_NOT_OK forever. One pair per LinChannel used.
-
-- **On `LinIf_HeaderIndication`, always drive ALL 5 response inports.** Leaving `Cs`, `Drc`, `Dl`, `Data`, or `Status` unconnected produces undefined behavior in the driver. `Status = E_NOT_OK` alone is sufficient to ignore a header (the other four are then don't-cares), but they still must be wired to *something* (Ground, Enumerated Constant, or Data Store Read).
-
-- **On `Lin_SendFrame`, wire `SduPtr` (inport 5) to Ground when `Drc = LIN_FRAMERESPONSE_RX`.** There is no data to send; the driver ignores the pointer in RX mode but Simulink still requires a driver on every inport.
-
-- **Never set `text` on any `Lin` or `LinIf` block** -- system-managed.
-
-- **Verify Cs, Drc, and Dl match on both ends.** A LIN transaction with mismatched checksum type (Classic vs Enhanced), mismatched direction, or mismatched data length produces bus errors that cascade -- Lin_GetStatus reports `LIN_TX_ERROR` or `LIN_RX_ERROR`, and the LinIf error indication (if wired) fires. Both the master's `Lin_SendFrame` inputs AND the config-tool LinFrame table entry for that PID must agree.
-
-- **`LinIf_HeaderIndication` (specifically) is bidirectional -- do not treat it as one-way.** Unlike `Hardware_Interrupt_Handler` (which only outputs), the `LinIf_HeaderIndication` block has 5 inputs that the user MUST drive from the function-call subsystem. Failing to wire the inputs back leaves the driver waiting for a response that never comes, and the LIN transaction times out on the wire. The other 5 `LinIf_*` callbacks (`RxIndication`, `TxConfirmation`, `WakeupConfirmation`, `LinErrorIndication`, `CheckWakeup`) are output-only or nearly so -- see Sec.3.4 for verified port shapes.
-
-- **When adding a second LIN channel to a model, remember to add its `Lin_WakeUpInternal` + `Lin_CheckWakeUp` in Initialize Function.** The Slave channel is passive at wire level but still needs its driver-side state machine brought up. Verified across all dual-channel shipped examples.
+- **List both `Lin_43_LPUART_FLEXIO.h` and `LinIf.h` in the LIN board-init
+  entry's headers (Sec.5.5).**
+- **Route every LIN callback through a `LinIf` block, never through
+  `Hardware_Interrupt_Handler`.** `LinIf_HeaderIndication` and its 5
+  siblings use a standalone `s32k3_linif` block; "add an ISR handler for LIN
+  header indication" means add a `LinIf` block.
+- **Add one `Lin_WakeUpInternal` + `Lin_CheckWakeUp` pair per used LinChannel
+  in the Initialize Function, including a Slave channel.** Without it the
+  channel stays in Sleep and `Lin_SendFrame` returns E_NOT_OK forever.
+- **Drive all 5 response inports of `LinIf_HeaderIndication` (`Cs`, `Drc`,
+  `Dl`, `Data`, `Status`).** The block is bidirectional: unwired inputs give
+  undefined driver behavior or a wire timeout. `Status = E_NOT_OK` ignores a
+  header, but the other four still need a source (Ground, Enumerated
+  Constant, or Data Store Read); the other `LinIf_*` callbacks are
+  output-only or nearly so (Sec.3.4).
+- **On `Lin_SendFrame` with `Drc = LIN_FRAMERESPONSE_RX`, wire `SduPtr`
+  (inport 5) to Ground.** The driver ignores it in RX mode, but Simulink
+  requires a source on every inport.
+- **Match `Cs`, `Drc`, and `Dl` between `Lin_SendFrame` and the config-tool
+  LinFrame entry for that PID.** A mismatch produces cascading bus errors
+  (`LIN_TX_ERROR` / `LIN_RX_ERROR`, LinIf error indication).

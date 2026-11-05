@@ -10,7 +10,7 @@ from the RTD SPI component folder
 `.../eclipse/plugins/Spi_TS_T40D34M70I0R0/` (S32K3 RTD 7.0.0).
 
 > **Tip -- start from a shipped example.** Open a shipped SPI example via
-> [`opening-mbdt-example`](../../../opening-mbdt-example/SKILL.md); its
+> [`opening-mbdt-example`](../../opening-mbdt-example/SKILL.md); its
 > `.mex` project (Pins -> LPSPI, Peripherals -> Spi, Platform -> NVIC for
 > the async case) plus its model (Initialize Function `SPI_SetAsyncMode`,
 > transmit / read / setup blocks, per-job and per-sequence ISR handlers)
@@ -180,6 +180,7 @@ slot and the model is incoherent.
 | `Hardware_Interrupt_Handler` | `{family}_isr_handler` | Routes a Job-end or Sequence-end notification into a function-call subsystem (async mode only) |
 | `FreeMASTER Config` (optional) | `{family}_fm_config` | Ships in the async example's `.pmpx` companion project |
 
+
 The async example places **two** ISR-handler blocks: one for the Job-end
 callback and one for the Sequence-end callback (Sec.7).
 
@@ -222,7 +223,7 @@ inspection -- do not assume. Sync mode does not require NVIC enablement.
 
 ### 4.4 Board Initialization (Simulink model)
 
-Add via [`editing-mbdt-board-init`](../../../editing-mbdt-board-init/SKILL.md):
+Add via [`editing-mbdt-board-init`](../../editing-mbdt-board-init/SKILL.md):
 
 ```
 Component : Spi
@@ -526,7 +527,7 @@ Hardware wiring (user provides with jumpers):
   notifications, ISR routing through the family handler) is expected to
   hold on other MBDT families. Board-init component name may differ
   (S32K3 uses `Spi` with `#include "Spi.h"`); discover live via
-  `get_mbdt_board_init({family})`.
+  `get_mbdt_board_init({model})`.
 
 
 ---
@@ -534,37 +535,19 @@ Hardware wiring (user provides with jumpers):
 
 ## 12. Guardrails (SPI-specific)
 
-- **Never stub SPI functions.** Do not hand-write `Spi_Init`,
-  `Spi_AsyncTransmit`, `Spi_SyncTransmit`, `Spi_SetupEB`, any
-  `MBDT_SPI_*_callback`, or any RTD function into generated C. The
-  board-init entry (Sec.4.4) is what triggers MBDT to generate the driver
-  code.
+Generic block rules (no stubs, no invented names, interrupts only via the
+ISR-handler block, `api_func` first, never set `text`) are in
+[`../SKILL.md`](../SKILL.md); only SPI-specific rules follow.
 
-- **Never invent Channel / Job / Sequence / External-Device names.**
-  `SpiChannel_0`, `SpiJob_0`, `SpiSequence_0`, `CSIB0` are exact strings
-  from the config tool. Read them from the block's live enums.
-
-- **Match the `api_func` to the channel buffer type.** `Spi_WriteIB` /
-  `Spi_ReadIB` are for IB channels; `Spi_SetupEB` is for EB channels.
-  Mixing them silently misbehaves.
-
-- **Set `Spi_AsyncTransmit` / `Spi_SyncTransmit` against a Sequence, not
-  a Job or Channel.** The transfer unit is the Sequence; `job` /
-  `channel` enums are for the result-query and buffer functions.
-
-- **`Spi_SetAsyncMode` must run before any async transfer** and its
-  `mode` must be `Interrupt` for ISR-delivered completion. If it is
-  missing or set to `Polling`, the async callbacks never fire -- a
-  runtime silence, not a build error.
-
-- **Never route an SPI interrupt through a parameter on the `Spi`
-  block.** No `isr_*` / `callback_*` parameter exists on `{family}_spi`.
-  All SPI notifications (Job-end and Sequence-end) go through the
-  `Hardware_Interrupt_Handler` block, and `irqHandlers` must be the exact
-  live callback name.
-
-- **Never set `text` on any `Spi` block** -- system-managed.
-
-- **Chip-select is config-tool-owned.** Do not attempt to set PCS
-  identifier, polarity, behavior, or selection engine from the Simulink
-  block -- they live on the External Device in Peripherals -> Spi.
+- **Match `api_func` to the channel buffer type.** `Spi_WriteIB` /
+  `Spi_ReadIB` are for IB channels, `Spi_SetupEB` for EB channels; mixing
+  them silently misbehaves.
+- **Transmit against a Sequence, not a Job or Channel.** `Spi_AsyncTransmit` /
+  `Spi_SyncTransmit` take the Sequence; the `job` / `channel` enums are for
+  the result-query and buffer functions.
+- **Call `Spi_SetAsyncMode` with `mode = Interrupt` before any async
+  transfer.** If it is missing or set to `Polling`, the async callbacks never
+  fire -- a runtime silence, not a build error.
+- **Configure chip-select in the config tool, not on the block.** PCS
+  identifier, polarity, behavior, and selection engine live on the External
+  Device in Peripherals -> Spi.

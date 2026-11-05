@@ -1,5 +1,5 @@
 % Model-Based Design Toolbox AI Support
-% Version 1.0.0 (R2024b-R2026a) 28-Sep-2026
+% Version 1.1.0 (R2024b-R2026a) 05-Nov-2026
 % 
 
 % Copyright 2026 NXP

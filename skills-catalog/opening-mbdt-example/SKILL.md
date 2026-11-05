@@ -4,7 +4,7 @@ description: "Use when the user asks to open, load, copy, try, browse, or list N
 license: LA_OPT_Online Code Hosting NXP_Software_License
 metadata:
   author: NXP
-  version: "1.0.0"
+  version: "1.1.0"
   product: nxp-mbdt
   tags: '[mbdt, examples, open]'
 ---

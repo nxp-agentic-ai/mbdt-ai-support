@@ -1,10 +1,10 @@
 ---
 name: configuring-mbdt-blocks
-description: "Use when the user wants to add, read, configure, set a parameter on, select a driver function (api_func) for, or wire an interrupt for any NXP MBDT driver block on a Simulink model, or asks why block parameters are grayed out or hidden. Covers one block per Real-Time Driver component (Can, Adc, Dio, Pwm, Spi, Uart, I2c, Lin, Gpt, Icu, Mcl, Mem, Fee, MotorControl, FreeMASTER, Profiler, ISR handler) on any MBDT platform (S32K3), via live get_param/set_param discovery. Out of scope: Hardware Implementation fields, target MCU selection, opening S32CT or EB tresos."
+description: "Use when the user wants to add, read, configure, set a parameter on, select a driver function (api_func) for, or wire an interrupt for any NXP MBDT driver block on a Simulink model, or asks why block parameters are grayed out or hidden. Covers one block per Real-Time Driver component (Can, Adc, Dio, Pwm, Spi, Uart, I2c, Lin, Gpt, Icu, Mcl, Mem, Fee, DataMemRead, DataMemWrite, Read_Register, Write_Register, Rdc_Checker, Etpu, Tpp, MotorControl, FreeMASTER, Profiler, ISR handler) on any MBDT platform (S32K3), via live get_param/set_param discovery. Out of scope: Hardware Implementation fields, target MCU selection, opening S32CT or EB tresos."
 license: LA_OPT_Online Code Hosting NXP_Software_License
 metadata:
   author: NXP
-  version: "1.0.0"
+  version: "1.1.0"
   product: nxp-mbdt
   tags: '[mbdt, blocks, configuration]'
 ---
@@ -67,18 +67,22 @@ A correctly-configured peripheral does not just place a block and route an ISR -
 
 **Rule:** when a build fails on a *missing generated file*, your first action is to run the config tool's validation and read its actual errors -- before touching the model or any block parameter.
 
+## External S32CT tools
+
+`nxp_s32ct_inspect` / `nxp_s32ct_validate` (used here and in every reference) are provided by the external **s32-ds-ai-support** MCP server, not by this toolkit. Before the first call, check which S32CT tools that server exposes (its action search) and use the matching ones -- tool names differ between server versions (e.g. `s32ct.inspect_instances`, `s32ct.inspect_pins`, `s32ct.inspect_xrefs`, `s32ct.validate`). If the server is not connected, say so and ask the user to connect it or check the config tool via `opening-mbdt-config-tool`; never invent its results.
+
 
 ## The Block Behavioral Model
 
 The single mental model to apply to any MBDT block. Live discovery is what makes each claim safe; none of these overrides the `DialogParameters` of the block in front of you.
 
-1. **One block per Real-Time Driver component.** Each is an `S-Function` with `MaskType` of shape `{family}_{role}` (e.g. `s32k3_can`, `s32m2_dpga`, `s32ze_pwm`). Its generated code inserts the corresponding RTD C-function call.
+1. **One block per Real-Time Driver component.** Each is an `S-Function` with `MaskType` of shape `{family}_{role}` (e.g. `s32k3_can`, `s32k3_pwm`). Its generated code inserts the corresponding RTD C-function call.
 
 2. **`api_func` is the master control.** When present it is the function selector: it reshapes the S-Function's ports, shows/hides/enables every other parameter via the mask callback, and maps 1:1 to the RTD C-function name. Hidden/disabled parameters carry no meaning for the current function. **Always set `api_func` first**, then read the parameters the block now shows.
 
 3. **Dropdown entries are owned by the external config tool.** All resource enums (`channel`, `controller`, `instance`, `hw_unit`, `port`, `group`, `hw_obj`, `blockName`, `reg`, `irqGroup`, `irqHandlers`, `cantxobj`, `canrxobj`, ...) are populated from the S32CT `.mex` project or the EB tresos `_TresosProject` folder. When unconfigured, the enum holds exactly one **sentinel** of shape `"No {thing} configured"` / `"No {thing} available"`. The sentinel is **not** a valid selection -- it means the resource is not declared. Open the config tool via `opening-mbdt-config-tool`; never invent entries and never "pick" or strip the sentinel.
 
-4. **ISRs and callbacks have one owner per family.** Never a per-peripheral parameter. They route exclusively through the family's single ISR-handler block: `Hardware_Interrupt_Handler` (S32K3) or `ISR Handler` (S32N), all `MaskType = {family}_isr_handler`. `irqGroup` names the owning driver (`Adc`, `Can`, `Pwm`, ...); `irqHandlers` cascades from it to the specific handler.
+4. **ISRs and callbacks have one owner per family.** Never a per-peripheral parameter. They route exclusively through the family's single ISR-handler block: `Hardware_Interrupt_Handler` (`MaskType = {family}_isr_handler`). `irqGroup` names the owning driver (`Adc`, `Can`, `Pwm`, ...); `irqHandlers` cascades from it to the specific handler.
 
 5. **Closed parameter type set.** Every dialog parameter has `Type in {enum, boolean, string}`:
    - `enum` -> one exact entry from `dp.{name}.Enum` (validate before set, case-sensitive).
@@ -90,7 +94,7 @@ The single mental model to apply to any MBDT block. Live discovery is what makes
 
 7. **Config Parameters vs block parameters are different worlds.** Driver-wide settings (Build, Clocking, PIL, target MCU, per-driver Hardware Implementation) live in Configuration Parameters (`setting-mbdt-model-params`). Block dialog parameters live in `DialogParameters` (this skill). Do not conflate.
 
-8. **Block availability is a runtime query.** Some blocks exist only on some families (`MotorControl`, `Rdc_Checker`, `eTPU`, `TPP Config` on S32K3; `Ae`, `Dpga`, `Gdu` on S32M2; ISR-handler named `ISR Handler` on S32N, `Hardware_Interrupt_Handler` elsewhere). Always resolve via `get_mbdt_toolbox(family, 'blocks')`; never assert existence from training data.
+8. **Block availability is a runtime query.** Some blocks exist only on some families (`MotorControl`, `Rdc_Checker`, `eTPU`, `TPP Config` exist on S32K3 only). Always resolve via `get_mbdt_toolbox(family, 'blocks')`; never assert existence from training data.
 
 ## Workflow
 
@@ -100,7 +104,7 @@ The single mental model to apply to any MBDT block. Live discovery is what makes
 
 3. **Preflight -- hardware target resolved.** Before *adding* any block, read `get_param({model},'HardwareBoard')` (and the family `SystemTargetFile`) and confirm it matches Step 2 and the intended MCU / board. If unset, mismatched, or generic (`MATLAB Host`, plain ERT), stop and route to `setting-mbdt-target-mcu`. A block on an untargeted model resolves against whichever family is first on the path and generates silently-wrong code later.
 
-4. **Preflight -- driver component declared.** Before adding a peripheral block or selecting a resource enum, confirm the driver component exists in the external config tool. For S32CT, call `nxp_s32ct_inspect(kind='instances')` and check the driver's `type_id` is present. For EB tresos, read `{model}_TresosProject/config.project` (or ask the user to confirm via `opening-mbdt-config-tool`). If missing, stop and route to `opening-mbdt-config-tool` -- a missing component means the board-init entry is also missing and the peripheral will build but carry no traffic (silent failure). See the Preflight quick reference and the peripheral reference for the exact `type_id`.
+4. **Preflight -- driver component declared.** Before adding a peripheral block or selecting a resource enum, confirm the driver component exists in the external config tool. For S32CT, call `nxp_s32ct_inspect(kind='instances')` (see "External S32CT tools") and check the driver's `type_id` is present. For EB tresos, read `{model}_TresosProject/config.project` (or ask the user to confirm via `opening-mbdt-config-tool`). If missing, stop and route to `opening-mbdt-config-tool` -- a missing component means the board-init entry is also missing and the peripheral will build but carry no traffic (silent failure). See the Preflight quick reference and the peripheral reference for the exact `type_id`.
 
 5. **Discover the live block catalog** via `get_mbdt_toolbox(family, 'blocks')` (each line `"{block} - {internal parent path}"`). This is the single source of truth for block existence. Resolve the user's wording against it; refuse near-misses.
 
@@ -116,7 +120,7 @@ The single mental model to apply to any MBDT block. Live discovery is what makes
 
 ### Preflight quick reference (illustrative only)
 
-Steps 3-4 apply to every peripheral. The authoritative list per `.mex` comes from `nxp_s32ct_inspect(kind='instances')`; the driver `type_id` matches the header emitted into `mbdt_board_init.c` and the board-init component name. Suffixes drift between toolbox versions -- never rely on this table alone. For CAN, UART, LIN, and I2C the authoritative `type_id` and board-init symbol are in the per-peripheral reference (see the References section below); the References table supersedes this one for those four. If you cannot resolve the mapping, ask -- never invent a `type_id`.
+Steps 3-4 apply to every peripheral. The authoritative list per `.mex` comes from `nxp_s32ct_inspect(kind='instances')`; the driver `type_id` matches the header emitted into `mbdt_board_init.c` and the board-init component name. Suffixes drift between toolbox versions -- never rely on this table alone. For CAN, UART, LIN, I2C, Fee, and Mem the authoritative `type_id` and board-init symbol are in the per-peripheral reference (see the References section below); the References table supersedes this one for those six. If you cannot resolve the mapping, ask -- never invent a `type_id`.
 
 | Peripheral | Example `type_id` | Reference |
 |---|---|---|
@@ -161,7 +165,7 @@ This skill does **not** save the model. To persist, call `save_system({model})` 
 - **Never fabricate runtime values.** Block names, parameter names, prompts, enum entries (function / channel / controller / instance / interrupt-group / handler / register names), and current values come only from `get_mbdt_toolbox` (existence) and `get_param(...,'DialogParameters')` (parameters). If discovery fails or returns an empty/sentinel list, stop and ask.
 - **Never act on a platform without verifying the MBDT toolbox is installed.** Before adding, reading, or configuring any block, call `detect_matlab_toolboxes` and require a `Model-Based Design Toolbox for S32{family}...` entry (Workflow Step 2). A `HardwareBoard` value or an `mbd_*` package on the path is not proof. If the family toolbox is absent, stop, name the missing product, and ask -- never substitute another family's library.
 - **Never proceed on an unverified toolbox / target / declaration.** The three preflights (Steps 2, 3, 4) are mandatory before adding a block or selecting a resource enum. On any failure -- wrong family library, untargeted model, sentinel enums (`"No {thing} configured"` / `"No {thing} available"`), missing board-init entry -- route out to the named skill (`setting-mbdt-target-mcu` / `opening-mbdt-config-tool`) rather than pressing ahead. All four failures are silent and surface only at code generation. A sentinel is never a valid selection; activating a previously-unused peripheral additionally requires clocks gated on, pins muxed, controller enabled, and interrupts declared in the config tool.
-- **Never route an interrupt through a peripheral-block parameter.** All ISR/callback wiring lives on the family ISR-handler block (`Hardware_Interrupt_Handler` / `ISR Handler`, `MaskType = {family}_isr_handler`). Do not add or invent an `isr_*` / `callback_*` / `notification_*` parameter on the peripheral block, even if a similarly named field exists in non-MBDT blocks.
+- **Never route an interrupt through a peripheral-block parameter.** All ISR/callback wiring lives on the family ISR-handler block (`Hardware_Interrupt_Handler`, `MaskType = {family}_isr_handler`). Do not add or invent an `isr_*` / `callback_*` / `notification_*` parameter on the peripheral block, even if a similarly named field exists in non-MBDT blocks.
 - **Never set system-managed parameters** (`text`, `descript`, `blockCbk`). Read with `get_param`; never `set_param`.
 - **Never stub a missing RTD function to make the build link.** Do not insert a manual stub in the generated C, model, or S-Function. Change `api_func` to a function the config tool has generated, or define the handler via `opening-mbdt-config-tool`. Refuse stub-creation outright.
 - **Closed type set is a contract.** Any parameter whose `Type` is not `enum`/`boolean`/`string` is a discovery anomaly: stop and report it; do not invent a set-value shape.
@@ -183,8 +187,8 @@ Per-peripheral references are self-contained deep dives (behavioral model, ISR w
 | Peripheral | Reference | When to load it |
 |---|---|---|
 | ADC | [`reference/adc.md`](reference/adc.md) | Add/configure an `Adc` block or wire an ADC conversion-complete notification. ADC is group-based (HW-unit -> group -> channel), needs a mandatory `Adc_SetupResultBuffer` in the Initialize Function, and is frequently a hardware-trigger *sink* (BCTU/CTU cross-triggered from a PWM/eMIOS edge via TRGMUX -> LCU). |
-| CAN (classic + CAN FD) | [`reference/can.md`](reference/can.md) | Add/configure/route a `Can` block or wire `CanIf_*` callbacks (RxIndication, TxConfirmation, ControllerBusOff, ...); also CAN transceiver init (five board patterns: GPIO wake-up, TJA1153 C-helper, jumper-selected, external discrete, I2C GPIO-expander). |
-| DIO | [`reference/dio.md`](reference/dio.md) | Add/configure a `Dio` block (`Dio_WriteChannel` / `Dio_ReadChannel` / `Dio_FlipChannel` / port / channel-group). DIO is flat channel-based with application-named channels, has **no `Dio_Init`** (the pad is set up by `Port_Init` from the Port component) and **no interrupt of its own** (pin edge/level detection is the ICU driver's job); covers the Pins/PORT/DIO three-way relation and the per-family `DioChannelId` arithmetic (S32K3 half-port `32*port+pin` vs S32N virtual-GPIO controller-relative index). |
+| CAN (classic + CAN FD) | [`reference/can.md`](reference/can.md) | Add/configure/route a `Can` block or wire `CanIf_*` callbacks (RxIndication, TxConfirmation, ControllerBusOff, ...); also CAN transceiver init (four board patterns: GPIO wake-up, TJA1153 C-helper, jumper-selected, external discrete). |
+| DIO | [`reference/dio.md`](reference/dio.md) | Add/configure a `Dio` block (`Dio_WriteChannel` / `Dio_ReadChannel` / `Dio_FlipChannel` / port / channel-group). DIO is flat channel-based with application-named channels, has **no `Dio_Init`** (the pad is set up by `Port_Init` from the Port component) and **no interrupt of its own** (pin edge/level detection is the ICU driver's job); covers the Pins/PORT/DIO three-way relation and the S32K3 `DioChannelId` half-port arithmetic (`32*port+pin`). |
 | GPT | [`reference/gpt.md`](reference/gpt.md) | Add/configure a `Gpt` block or wire a timer-expiry notification. GPT is channel-based and rides on a lower timer IP (PIT/STM); every MBDT GPT model carries two mandatory toolbox channels (`StepTimer`, `ProfilerTimer`) that must not be removed; the mandatory init action is `Gpt_StartTimer`, and the notification callback is IP-derived (`Gpt_PitNotification`). |
 | I2C | [`reference/i2c.md`](reference/i2c.md) | Add/configure an `I2c` block or wire `MBDT_I2c_Callback`; includes the hardware pull-up requirement on S32K311EVB-Q100 / S32K312EVB-Q172 / S32K388EVB-Q289 (a common silent failure MBDT cannot fix model-side). |
 | ICU | [`reference/icu.md`](reference/icu.md) | Add/configure an `Icu` block (edge counter / signal-edge detect / signal-measurement / timestamp) or wire an ICU notification. ICU owns pin edge/level detection (which DIO does not); channel-based, ties into the family ISR handler for edge/timestamp notifications. |
@@ -194,10 +198,20 @@ Per-peripheral references are self-contained deep dives (behavioral model, ISR w
 | PWM | [`reference/pwm.md`](reference/pwm.md) | Add/configure a `Pwm` block or wire a per-channel edge notification. PWM is channel-based (`PwmChannel_N` routed to eMIOS instances), needs no mandatory Initialize Function block, and is frequently a hardware-trigger *source* for the ADC (PWM/eMIOS edge -> TRGMUX -> LCU -> BCTU, routed via the `Mcl` driver). |
 | SPI | [`reference/spi.md`](reference/spi.md) | Add/configure an `Spi` block or wire `MBDT_SPI_end_job*_callback` / `MBDT_SPI_end_sequence*_callback`; covers the External Device -> Sequence -> Job -> Channel hierarchy, IB/EB channel buffers, chip-select config, and the dual per-Job/per-Sequence notification pattern. |
 | UART | [`reference/uart.md`](reference/uart.md) | Add/configure a `Uart` block or wire `MBDT_Uart_Callback` in any of four modes (sync / async / buffer via `Uart_SetBuffer` / DMA-backed); covers the LPUART-vs-FreeMASTER exclusivity rule. |
+| Fee | [`reference/fee.md`](reference/fee.md) | Add/configure `Fee` blocks (Flash EEPROM Emulation). Fee is job-based / asynchronous; needs `Fls_Init` before `Fee_Init` in board-init; `Fee_MainFunction` must be called periodically; completion is polled via `Fee_GetJobResult`. |
+| Mem | [`reference/mem.md`](reference/mem.md) | Add/configure `Mem` blocks (`Mem_43_INFLS` internal flash driver). Job-based async API; `Mem_MainFunction` required; instance-based; covers blank-check, erase, read, write, and HW-specific service functions. |
+| MCL | [`reference/mcl.md`](reference/mcl.md) | Add/configure `Mcl` blocks (Multi-purpose Clock Layer: DMA, eMIOS, LCU, TRGMUX). MCL is a cross-cutting infrastructure driver used by ADC, PWM, ICU for hardware-trigger routing; covers DMA channel allocation, eMIOS unified channel config, LCU logic-cell wiring, and TRGMUX input-output mux. |
+| ISR Handler | [`reference/isr.md`](reference/isr.md) | Add/configure `Hardware_Interrupt_Handler` blocks. Single gateway for all ISR registration in MBDT models; `irqGroup` selects the RTD driver module; `irqHandlers` names the specific ISR; `irqSim` enables simulation-mode firing; covers all peripheral groups (Adc/Can/Fee/Gpt/I2c/Icu/Mcl/Mem/MotorControl/Pwm/Spi/Uart). |
+| Memory Access | [`reference/memory.md`](reference/memory.md) | Add/configure `DataMemRead` / `DataMemWrite` blocks (direct pointer-dereference memory access). No config-tool dependency; `base` + `offset` address string pattern; `ptr` selects uint8/16/32; `address_check` adds runtime bounds guard. Use only when no RTD driver block covers the target address. |
+| Register Access | [`reference/reg.md`](reference/reg.md) | Add/configure `Read_Register` / `Write_Register` blocks (MCU register access via guided peripheral + register dropdowns). `periph` selects the peripheral from the MCU address map; `reg` is populated after `periph`; `addr` / `regSize` / `descript` are auto-filled. Set `periph` before `reg`. |
+| MotorControl | [`reference/motorcontrol.md`](reference/motorcontrol.md) | Add/configure `MotorControl` blocks (S32K3 CDD). Full FOC and open-loop motor drive API; `instance` enum; alignment/calibration/enable sequence; `paramInterpret`, `valueRepresentation`, `outputAlignment`, `reloadPosition` selectors. S32K3-specific (`mbd_s32k3_cdd_library`). |
+| Rdc_Checker | [`reference/rdc_checker.md`](reference/rdc_checker.md) | Add/configure `Rdc_Checker` blocks (S32K3 CDD, Resolver-to-Digital Converter fault detection). `instance`, `threshold`, `xResolver` enums; polling and callback-driven fault detection. S32K3-specific. |
+| eTPU | [`reference/etpu.md`](reference/etpu.md) | Add/configure `eTPU` blocks (S32K3 CDD, Enhanced Time Processing Unit). Fixed `etpuEngine`/`eStartSync`/`eMemoryType` enums (no sentinel pattern); `Etpu_Start` in Initialize Function; error-injection functions are test-only. S32K3-specific. |
+| TPP Config | [`reference/tpp.md`](reference/tpp.md) | Add/configure `TPP Config` blocks (S32K3, SPI-controlled gate driver for three-phase inverter). No `api_func` -- configuration-only block; DIO (`en1_chn`, `en2_chn`, `rst_chn`, `cs_chn`) and SPI (`spi_chn`, `spi_seq`) resource enums; `dead_time` string; interrupt-enable booleans. S32K3-specific (`mbd_s32k3_utility_library/TPP Blocks`). |
 
 **Precedence:** a reference beats training data or an adjacent reference; for two conflicting references, the one for the peripheral in front of you wins.
 
-**Missing reference?** For a peripheral without a reference file (MCL, Fee, Mem, MotorControl, ...), follow the Workflow without one, and lean on the shipped MBDT examples as the substitute curated source:
+**Missing reference?** For a peripheral without a reference file, follow the Workflow without one, and lean on the shipped MBDT examples as the substitute curated source:
 
 1. **Open the matching example** for that peripheral via `opening-mbdt-example` (its list comes from `get_mbdt_toolbox(family, 'examples')` -- pick the one whose name matches the peripheral / use case).
 2. **Learn block usage from the example, not from memory:** read which MBDT blocks it places, how their `api_func` and resource enums are set (via `get_param(...,'DialogParameters')` on the example's blocks), how interrupts are routed to the family ISR-handler, and how the config tool declares the driver. Mirror that block set and topology into the user's model.

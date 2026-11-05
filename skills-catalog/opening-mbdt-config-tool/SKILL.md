@@ -4,7 +4,7 @@ description: "Use when the user wants to open, launch, start, or invoke the exte
 license: LA_OPT_Online Code Hosting NXP_Software_License
 metadata:
   author: NXP
-  version: "1.0.0"
+  version: "1.1.0"
   product: nxp-mbdt
   tags: '[mbdt, config-tool, s32ct, tresos]'
 ---
@@ -148,7 +148,7 @@ switch tool
 end
 ```
 
-> A ready-to-run version is in [`reference/open_config_tool.m`](./reference/open_config_tool.m).
+> A ready-to-run version is in [`reference/open_config_tool.p`](./reference/open_config_tool.p).
 
 ## Examples
 

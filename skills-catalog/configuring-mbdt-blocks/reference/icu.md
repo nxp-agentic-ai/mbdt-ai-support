@@ -21,7 +21,7 @@ edge-detect / edge-counter on GPIO EIRQ lines; eMIOS is required for
 > Pins / Peripherals->Icu / Peripherals->Mcl / Interrupt Controller +
 > Simulink board init, initialize function, callback subsystem, ISR
 > wiring) that mirrors every section below. Open via the
-> [`opening-mbdt-example`](../../../opening-mbdt-example/SKILL.md) skill;
+> [`opening-mbdt-example`](../../opening-mbdt-example/SKILL.md) skill;
 > discover names at runtime, never from memory.
 
 ---
@@ -141,6 +141,7 @@ stale after a `.mex` edit -- run `open_system({icuBlk})` then
 
 
 
+
 ---
 
 ## 4. Configuration Workflow (6 steps)
@@ -211,7 +212,7 @@ Header    : #include "Icu.h"
 Code      : Icu_Init(&Icu_Config);
 ```
 
-Use the [`editing-mbdt-board-init`](../../../editing-mbdt-board-init/SKILL.md)
+Use the [`editing-mbdt-board-init`](../../editing-mbdt-board-init/SKILL.md)
 skill; never hand-write the init.
 
 #### RTD documentation (Integration + User Manual)
@@ -396,31 +397,27 @@ config-tool symbol and `irqHandlers` -> callback never runs.
 - **Cross-family portability.** Behavioral model holds; exact board-
   init component name/header, measurement-mode enum labels, and
   HW-channel identifier grammar may differ. Confirm with
-  `get_mbdt_board_init({family})` and the family's shipped ICU
+  `get_mbdt_board_init({model})` and the family's shipped ICU
   examples.
 
 ---
 
-## 12. Guardrails (icu-specific -- supersedes nothing in parent SKILL.md)
+## 12. Guardrails (ICU-specific)
 
-1. **Never stub RTD functions.** Missing `Icu_Init` / `Icu_*` symbols
-   always mean a config-tool or board-init gap (Sec.4.5), never a
-   request to author driver code by hand.
-2. **Never invent channel names.** `IcuChannel_{N}` values are owned by
-   the config tool -- read live via `get_param`; never enumerate from
-   memory; never infer the physical HW channel from the label
-   (consult `IcuChannelRef`).
-3. **Never invent HW-channel IDs.** `IcuIsrHwId` values
-   (`SIUL2_{M}_IRQ_CH_{N}`, `EMIOS_{M}_CH_{C}`, family variants) are
-   owned by the config-tool NVIC UI.
-4. **Never set `text` on any `Icu` block.** System-managed.
-5. **Never route the callback through a parameter on the `Icu` block.**
-   Callbacks flow through `Hardware_Interrupt_Handler` with `irqGroup = Icu` and `irqHandlers` matching the
-   config-tool notification symbol.
-6. **Set `api_func` first** (reshapes ports + visibility).
-7. **Always pair `Icu_EnableNotification` with the mode-specific
-   arming call** in Initialize Function -- enabling only one is a
-   silent-init failure neither the build nor the linker catches.
-8. **`api_func` must be consistent with `IcuMeasurementMode`** -- e.g.
-   `Icu_StartSignalMeasurement` on an `ICU_MODE_EDGE_COUNTER` channel
-   is a runtime error; validate mode-vs-function before selection.
+Generic block rules (no stubs, no invented names, interrupts only via the
+ISR-handler block, `api_func` first, never set `text`) are in
+[`../SKILL.md`](../SKILL.md); only ICU-specific rules follow.
+
+- **Never infer the physical HW channel from the `IcuChannel_{N}` label.**
+  Consult `IcuChannelRef`.
+- **Take `IcuIsrHwId` values from the config-tool NVIC UI.**
+  `SIUL2_{M}_IRQ_CH_{N}`, `EMIOS_{M}_CH_{C}` and family variants are owned
+  there.
+- **Wire callbacks with `irqGroup = Icu` and `irqHandlers` = the config-tool
+  notification symbol.**
+- **Always pair `Icu_EnableNotification` with the mode-specific arming call
+  in the Initialize Function.** Enabling only one is a silent init failure
+  that neither the build nor the linker catches.
+- **Keep `api_func` consistent with `IcuMeasurementMode`.** For example
+  `Icu_StartSignalMeasurement` on an `ICU_MODE_EDGE_COUNTER` channel is a
+  runtime error; validate mode vs function before selecting.

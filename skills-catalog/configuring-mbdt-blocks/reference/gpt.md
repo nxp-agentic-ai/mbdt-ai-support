@@ -51,7 +51,7 @@ and referenced by name; later sections do not re-derive them.
   no notification fires. This is a runtime silence, not a build error.
 
 > **Tip -- start from a shipped example.** Open a shipped GPT example via
-> [`opening-mbdt-example`](../../../opening-mbdt-example/SKILL.md); its
+> [`opening-mbdt-example`](../../opening-mbdt-example/SKILL.md); its
 > `.mex` project (Peripherals -> Gpt with channels declared under a
 > lower-timer-IP node, Peripherals -> Mcu for the timer clock,
 > Platform -> NVIC) plus its model (board init, Initialize Function with
@@ -262,7 +262,8 @@ leaves it on a stale hidden slot and the model is incoherent.
 | `Hardware_Interrupt_Handler` | `{family}_isr_handler` | Routes a timer-expiry notification into a function-call subsystem (interrupt mode) |
 | `FreeMASTER Config` (optional) | `{family}_fm_config` | Plots / tunes elapsed time over serial -- **not** a `Gpt` block |
 
-Discover exact paths via `detect_mbdt_blocks({family})`. An
+
+Discover exact paths via `get_mbdt_toolbox({family}, 'blocks')`. An
 interrupt-driven model places **one** ISR-handler block per timer
 notification in use.
 
@@ -317,7 +318,7 @@ and no ISR handler) does not require NVIC enablement.
 
 ### 4.5 Board Initialization (Simulink model)
 
-Add via [`editing-mbdt-board-init`](../../../editing-mbdt-board-init/SKILL.md):
+Add via [`editing-mbdt-board-init`](../../editing-mbdt-board-init/SKILL.md):
 
 ```
 Component : Gpt
@@ -332,7 +333,7 @@ emitted by the code-gen tool from Peripherals -> Gpt. **GPT initializes
 early (Priority 40), before Adc / Can / Pwm**, because the step and
 profiler timers (INV-2) must be running first. Priority 40 is the default
 emitted for the shipped example -- verify live via
-`get_mbdt_board_init({family})`.
+`get_mbdt_board_init({model})`.
 
 #### Expected generated C files (GPT)
 
@@ -550,39 +551,26 @@ element names, which include application-chosen channel names.
   `ProfilerTimer`** (INV-2). Read the full set live.
 - **The backing timer IP is config-tool-owned** (INV-1); on S32K3 every
   shipped GPT example is PIT-backed, STM is schema-supported but unused.
-- **Cross-family portability.** The behavioral model (the live-discovered
-  `api_func` set, the channel-based resource model, INV-1/INV-2/INV-3,
-  per-channel expiry notifications, ISR routing through the family
-  handler, the Mcu-owned timer clock) is expected to hold on S32K3.
-  Family-specific differences to discover live:
-  - board-init component name (`Gpt`) / header (`Gpt.h`) -- via
-    `get_mbdt_board_init({family})`;
-  - backing timer IP -- other families / projects may use STM or another
-    counter, changing the `GptPit_0` -> `GptStm_0` node, the
-    `Pit_Ip_Cfg.*` -> `Stm_Ip_Cfg.*` generated file, and the
-    `Gpt_PitNotification` -> `Gpt_StmNotification` callback;
+- **Board-init component.** Confirm the component name (`Gpt`) and
+  header (`Gpt.h`) live via `get_mbdt_board_init({model})`.
+- **Backing timer IP.** A project may use STM or another counter instead
+  of PIT, changing the `GptPit_0` -> `GptStm_0` node, the
+  `Pit_Ip_Cfg.*` -> `Stm_Ip_Cfg.*` generated file, and the
+  `Gpt_PitNotification` -> `Gpt_StmNotification` callback.
 
 ---
 
 ## 11. Guardrails (GPT-specific)
 
-- **Never stub GPT functions.** Do not hand-write `Gpt_Init`,
-  `Gpt_StartTimer`, `Gpt_StopTimer`, `Gpt_GetTimeElapsed`, any
-  `Gpt_*Notification`, or any RTD function into generated C. The
-  board-init entry (Sec.4.5) is what triggers MBDT to generate the driver
-  code.
-- **Never remove the mandatory `StepTimer` / `ProfilerTimer` channels**
-  (INV-2).
-- **A configured channel must be started** (INV-3).
-- **Never invent channel names.** `GptChannelConfiguration_N` are
-  application-chosen and vary per project; `StepTimer` / `ProfilerTimer`
-  are the fixed exceptions. Read them all from the block's live enum.
-- **The backing timer IP lives in the config tool, not on the block**
-  (INV-1). Do not look for it on the `Gpt` block.
-- **Never route a GPT notification through a parameter on the `Gpt`
-  block.** All GPT timer notifications go through the
-  `Hardware_Interrupt_Handler` block, and
-  `irqHandlers` must be the exact live `Gpt_{IP}Notification` name
-  (Sec.7).
-- **Set `api_func` first**, before any resource enum.
-- **Never set `text` on any `Gpt` block** -- system-managed.
+Generic block rules (no stubs, no invented names, interrupts only via the
+ISR-handler block, `api_func` first, never set `text`) are in
+[`../SKILL.md`](../SKILL.md); only GPT-specific rules follow.
+
+- **Never remove the mandatory `StepTimer` / `ProfilerTimer` channels
+  (INV-2).** They are the fixed channel names; every
+  `GptChannelConfiguration_N` name varies per project.
+- **Start every configured channel (INV-3).**
+- **Look for the backing timer IP in the config tool, not on the `Gpt` block
+  (INV-1).**
+- **Select the notification as the exact live `Gpt_{IP}Notification` entry
+  in `irqHandlers` (Sec.7).**

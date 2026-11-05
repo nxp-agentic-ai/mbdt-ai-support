@@ -17,7 +17,7 @@ config-tool setup.
 > controller) and its Simulink model (board init, initialize function,
 > runtime blocks, ISR-handler wiring) already form a coherent end-to-end
 > setup that mirrors every section below. Examples are listed and opened
-> via the [`opening-mbdt-example`](../../../opening-mbdt-example/SKILL.md)
+> via the [`opening-mbdt-example`](../../opening-mbdt-example/SKILL.md)
 > skill; never carry example names from memory -- discover them at runtime.
 
 ---
@@ -141,13 +141,15 @@ One `set_param` per parameter, in that order.
 ## 3. Required Block Catalog
 
 Blocks referenced by any CAN configuration (all live under the family's
-MBDT library; discover exact paths via `detect_mbdt_blocks({family})`):
+MBDT library; discover exact paths via `get_mbdt_toolbox({family}, 'blocks')`):
 
 | Block name | `MaskType` | Role |
 |---|---|---|
 | `Can` | `{family}_can` | Wraps one `Can_*` function; multiple instances per model |
 | `Dio` | `{family}_dio` | Drives EN / STB / ERRN transceiver GPIOs (and status LEDs) |
 | `MATLAB Function` (Simulink built-in) | -- | Wraps the `TJA1153Transceiver.init` helper class (Pattern 2 transceiver init only) |
+| `Hardware_Interrupt_Handler` | `{family}_isr_handler` | Routes CAN callbacks (`CanIf_RxIndication`, `CanIf_TxConfirmation`, ...) into function-call subsystems |
+
 
 Never create a "custom CAN block" or a stub function to work around a
 missing feature -- see Guardrails.
@@ -241,7 +243,7 @@ the line number depends on which mailboxes / notifications are used.
 ### 4.6 Board Initialization (Simulink model)
 
 Add the CAN driver init call to `mbdt_board_init.c` via the
-[`editing-mbdt-board-init`](../../../editing-mbdt-board-init/SKILL.md)
+[`editing-mbdt-board-init`](../../editing-mbdt-board-init/SKILL.md)
 skill. The canonical entry:
 
 ```
@@ -503,9 +505,9 @@ board requires a **transceiver bring-up sequence inside the Initialize
 Function**, placed as step 5 of the init sextet (Sec.5), between
 `Can_DisableControllerInterrupts` and `Can_EnableControllerInterrupts`.
 
-Observed examples fall into **five** patterns, chosen by the board's
-transceiver chip and how it is wired (Pattern 1 & 2 documented below in
-depth; Pattern 3 & 4 are simpler degenerate cases; 
+Observed S32K3 examples fall into **four** patterns, chosen by the
+board's transceiver chip and how it is wired (Pattern 1 & 2 documented
+below in depth; Pattern 3 & 4 are simpler degenerate cases).
 
 ### 7.1 Pattern 1 -- GPIO wake-up (TJA1043 family; MR-CANHUB style)
 
@@ -643,6 +645,7 @@ For an AI agent: **do not synthesize any DIO / helper block for the transceiver 
 | MR-CANHUBK344 | On-board TJA1153, board pre-configures secure state | Pattern 1, inline |
 | XS32K396-BGA-DC | On-board transceiver, **mode selected by jumper `J35`** | **Pattern 3** (no init) |
 
+
 ### 7.7 Config-tool requirements for the transceiver
 
 Beyond the FlexCAN requirements of Sec.4.3, the transceiver imposes
@@ -710,7 +713,7 @@ telemetry:
 `FreeMASTER Config` block to a freshly-authored CAN model exposes these
 variables to FreeMASTER without any additional wiring -- the block-name
 based symbol resolution is what a companion `.pmpx` relies on. See
-[`opening-mbdt-example`](../../../opening-mbdt-example/SKILL.md) for how
+[`opening-mbdt-example`](../../opening-mbdt-example/SKILL.md) for how
 to open a shipped `.pmpx` alongside its `.mdl`.
 
 ## 8.2 Expected CAN Analyzer Settings
@@ -860,56 +863,27 @@ Runtime
   interchangeable.
 - **NVIC entry names vary per instance.** `FlexCAN0_0_IRQn` for
   FlexCAN 0 line 0, `FlexCAN4_0_IRQn` for FlexCAN 4 line 0, and so on.
-- **Cross-family portability.** The behavioral model above (the `api_func`
-  function set discovered live, ISR-handler routing, init sextet) is expected to hold on
-  S32K3, but the exact board-init component
-  name may differ (`Can_43_FLEXCAN` is FlexCAN-specific; families with
-  a different CAN IP may use a different `{driver}_Init` symbol).
-  Discover live via `get_mbdt_board_init({family})`.
+- **Board-init component name.** `Can_43_FLEXCAN` is FlexCAN-specific.
+  Discover the exact component name live via
+  `get_mbdt_board_init({model})`.
 
 ---
 
-## 12. Guardrails (CAN-specific -- supersedes nothing in parent SKILL.md)
+## 12. Guardrails (CAN-specific)
 
+Generic block rules (no stubs, no invented names, interrupts only via the
+ISR-handler block, `api_func` first, never set `text`) are in
+[`../SKILL.md`](../SKILL.md); only CAN-specific rules follow.
 
-- **Never add CAN stubs by hand.** Do not hand-write `Can_Init`,
-  `Can_SetControllerMode`, `Can_Write`, `CanIf_*` callbacks, `TJA1153_Init`,
-  or any other Real-Time Driver / transceiver function into the
-  generated C, the model, or a hand-written .c file. Adding the CAN
-  init entry to the board initialization (Sec.4.6) is what triggers MBDT
-  to generate the driver code automatically. If the build reports a
-  missing CAN symbol, the fix is **always** in the config tool or the
-  board-init entry -- never in the C.
-
-- **Never invent HOH / controller / channel names.** `CanController_0`,
-  `CanHardwareObject_Can0_Tx_Interrupt`, `CanController_0_EN`, etc. are
-  exact strings owned by the S32CT/EB tresos project. Read them from
-  the block's live `Enum`; if the string is not present, open the
-  config tool via `opening-mbdt-config-tool` and add it there.
-
-- **Never fabricate the transceiver bring-up.** Either use two/three
-  `Dio_WriteChannel` blocks with the correctly named channels
-  (Pattern 1) or use the shipped `TJA1153Transceiver` helper via a
-  `MATLAB Function` block (Pattern 2). Do not hand-write GPIO edge
-  sequences, do not hand-author `coder.ceval` calls, do not modify
-  the `TJA1153Transceiver.m` class.
-
-- **Never wire an ISR through a parameter on the `Can` block.** No
-  `isr_*`, `callback_*`, or `notification_*` parameter exists on
-  `{family}_can`. All CAN callbacks go through the
-  `Hardware_Interrupt_Handler` block.
-
-- **Never set `text` on any `Can` block.** It is system-managed
-  (cached dump of the config tree); the block regenerates it on the
-  next mask refresh.
-
-- **`Can_EnableControllerInterrupts` must come after the transceiver
-  init**, not before. Reversing them is a subtle bug that lets the
-  first spurious CAN frame reach the FlexCAN controller before the
-  transceiver is out of Standby, which can lock the transceiver in
-  an error state on TJA1153 / TJA1463.
-
-- **When configuring `Can_Write`, expect the `controller` sentinel.**
-  `Can_Write` selects its target via `hw_obj`, not `controller`. The
-  `"No controller configured"` sentinel on `controller` is expected
-  for `Can_Write` and is not an error to report to the user.
+- **Bring up the transceiver only with the two documented patterns.** Use
+  `Dio_WriteChannel` blocks with the correctly named channels (Pattern 1) or
+  the shipped `TJA1153Transceiver` helper in a `MATLAB Function` block
+  (Pattern 2); never hand-write GPIO sequences or `coder.ceval` calls, and
+  never modify `TJA1153Transceiver.m`.
+- **Call `Can_EnableControllerInterrupts` after the transceiver init.** The
+  reverse order lets the first spurious frame reach FlexCAN while the
+  transceiver is still in Standby, which can lock TJA1153 / TJA1463 in an
+  error state.
+- **Expect the `controller` sentinel on `Can_Write`.** `Can_Write` selects its
+  target via `hw_obj`; `"No controller configured"` on `controller` is not
+  an error to report.

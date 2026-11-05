@@ -4,7 +4,7 @@ description: "Use whenever the user asks to read, set, change, pick, refresh, or
 license: LA_OPT_Online Code Hosting NXP_Software_License
 metadata:
   author: NXP
-  version: "1.0.0"
+  version: "1.1.0"
   product: nxp-mbdt
   tags: '[mbdt, com-port, pil, serial]'
   depends_on: '[setting-mbdt-model-params]'

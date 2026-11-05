@@ -5,11 +5,11 @@
 Bring AI-assisted development to NXP Model-Based Design Toolbox.
 
 NXP MBDT AI Support gives AI coding agents the NXP-specific capabilities and device expertise needed to develop Simulink applications for NXP MCUs and MPUs using the NXP Model-Based Design Toolbox (MBDT). Your agent can select and configure the target MCU, configure MBDT peripheral blocks and hardware parameters, initialize and customize the board, and work with existing MBDT applications and examples.
- 
+
 Beyond model configuration, the agent can build, compile, and deploy Simulink applications to NXP hardware, help diagnose build and configuration issues, and work across the broader NXP development flow. This includes working with S32 Design Studio and S32 Configuration Tools, as well as development and validation workflows such as Processor-in-the-Loop, External Mode, and FreeMASTER.
  
 NXP MBDT AI Support extends the MathWorks Simulink Agentic Toolkit with NXP-specific tools, skills, and device expertise, enabling AI agents to work directly with NXP devices and MBDT workflows. These capabilities are exposed to the AI agent through the [MATLAB® MCP Server](https://github.com/matlab/matlab-mcp-server), providing the connection between the agent, Simulink, and the NXP Model-Based Design Toolbox.
- 
+
 **NXP MBDT AI Support** delivers two complementary components:
 
 - **MCP Tools** - MATLAB-side functions exposed to AI agents through the MCP server. NXP AI Support Tools provide live access to and configuration of the installed NXP MBDT environment.
@@ -24,6 +24,8 @@ NXP MBDT AI Support extends the MathWorks Simulink Agentic Toolkit with NXP-spec
   - [Step 2 - Download, Install & Add the NXP MBDT AI Support to the MATLAB Path](#step-2---download-install--add-the-nxp-mbdt-ai-support-to-the-matlab-path)
   - [Step 3 - Register the MBDT AI Support MCP Tools with the AI Coding Agent](#step-3---register-the-mbdt-ai-support-mcp-tools-with-the-ai-coding-agent)
   - [Step 4 - Register the MBDT AI Support Skills with the AI Coding Agent](#step-4---register-the-mbdt-ai-support-skills-with-the-ai-coding-agent)
+- [Configuration and Troubleshooting](#configuration-and-troubleshooting)
+
 - [MCP Tools](#mcp-tools)
 - [Skills Catalog](#skills-catalog)
 - [Related Agentic Toolkits](#related-agentic-toolkits)
@@ -40,13 +42,10 @@ NXP MBDT AI Support extends the MathWorks Simulink Agentic Toolkit with NXP-spec
 | MATLAB MCP Server, MATLAB Agentic Toolkit & Simulink Agentic Toolkit | v0.12.0+ | See [Step 1 - Install the MATLAB MCP Server and the MathWorks Agentic Toolkits](#step-1---install-the-matlab-mcp-server-and-the-mathworks-agentic-toolkits) |
 | NXP Model-Based Design Toolbox (S32K3) | latest | [Download](https://www.nxp.com/design/design-center/software/automotive-software-and-tools/model-based-design-toolbox-mbdt:MBDT) |
 | AI Agent (MCP compatible) | latest |  Any MCP-compatible agent that can launch a standalone MCP server - such as [Claude Desktop](https://claude.ai/download), [VS Code](https://code.visualstudio.com/), [Cursor](https://www.cursor.com/), or [Goose](https://block.github.io/goose/), among others |
-| NXP S32DS AI Support | latest | [Download](https://github.com/nxp-agentic-ai/s32-tools-agentic-ai-support)|
 
 > **Note:** The MATLAB MCP Server, the MATLAB Agentic Toolkit, and the Simulink Agentic Toolkit are all delivered by the Agentic Toolkit Installer shipped by MathWorks. If they are not yet installed on the machine, follow [Step 1 - Install the MATLAB MCP Server and the MathWorks Agentic Toolkits](#step-1---install-the-matlab-mcp-server-and-the-mathworks-agentic-toolkits) before attempting to register the NXP MBDT AI Support.
 
-> **Note:** NXP Model-Based Design Toolbox is required, and it must match the target MCU family you plan to build for (e.g. install the S32K3 MBDT to target an S32K3 device).
-
-> **Note:** NXP S32DS AI Support is required for AI-assisted S32 Configuration Tools project configuration and S32 Design Studio.
+> **Note:** NXP Model-Based Design Toolbox is required, and it must match the target MCU family you plan to build for (e.g. install the S32K3 MBDT to target an S32K3 device). 
 
 ---
 ## How to Install
@@ -101,24 +100,23 @@ The `nxp.setup.registerAgent` helper accepts an optional `mcp_arguments` paramet
 
 > For the full list of supported MATLAB MCP Server arguments, see the [MATLAB MCP Server arguments documentation](https://github.com/matlab/matlab-mcp-core-server/tree/main#arguments).
 
-
 ```matlab
 nxp.setup.registerAgent("agent","claude", ...
     "mcp_arguments", [ ...
         "--matlab-session-mode=existing"]);
 ```
 
-> **Important:** When you use `--matlab-session-mode=existing`, the MATLAB MCP Server attaches to an already-running MATLAB session instead of starting a new one. That session must be shared first — run the following once in the MATLAB Command Window before starting the agent:
+> For the full list of supported MATLAB MCP Server arguments, please refer to the [MATLAB MCP Server arguments documentation](https://github.com/matlab/matlab-mcp-core-server/tree/main#arguments).
 
-```matlab
-shareMATLABSession
-```
-
+> **Important:** When using `--matlab-session-mode=existing`, the MATLAB MCP Server attaches to an already-running MATLAB session instead of starting a new one. That session must be shared first - run the following once in the MATLAB Command Window before starting the agent:
+>
+> ```matlab
+> shareMATLABSession
+> ```
 
 #### 3.2 - Register the MCP tools only (MathWorks stack, without NXP MBDT)
 
-If you have already configured the [MATLAB MCP Server](https://github.com/matlab/matlab-mcp-server) and the [Simulink Agentic Toolkit](https://github.com/matlab/simulink-agentic-toolkit), registering the MBDT extension takes just one step: append its `--extension-file` argument to the existing MCP server entry in your AI agent's configuration:
-
+If the [MATLAB MCP Server](https://github.com/matlab/matlab-mcp-server) and the [Simulink Agentic Toolkit](https://github.com/matlab/simulink-agentic-toolkit) are already configured and you only need the MBDT extension registered, add just the extension-file argument to the AI Agent MCP Server configuration:
 
 ```bash
 matlab-mcp-server.exe --extension-file=<YOUR_PATH>\mbdt-agentic-toolkit\tools.json
@@ -134,13 +132,19 @@ For users who prefer to install `matlab-mcp-server.exe` by hand, append the `--e
 "args": [
 	"--disable-telemetry=true",
 	"--extension-file=C:/Users/<username>/.matlab/agentic-toolkits/simulink/tools/tools.json",
-	"--extension-file=<YOUR_PATH>/mbdt-agentic-toolkit/tools.json"
+	"--extension-file=<YOUR_PATH>\mbdt-agentic-toolkit\tools.json",
+	"--matlab-session-mode=existing"
 	],
 "disabled": false,
 "autoApprove": []
 }
 ```
 
+> **Important:** When using `--matlab-session-mode=existing`, the MATLAB MCP Server attaches to an already-running MATLAB session instead of starting a new one. That session must be shared first - run the following once in the MATLAB Command Window before starting the agent:
+>
+> ```matlab
+> shareMATLABSession
+> ```
 
 ### Step 4 - Register the MBDT AI Support Skills with the AI Coding Agent
 
@@ -150,11 +154,11 @@ In the MATLAB Command Window, execute the following command, replacing `<agent>`
 
 | `<agent>` value | AI Agent         | Skills install location    |
 | --------------- | ---------------- | -------------------------- |
+| `"goose"`       | Goose            | `~/.agents/skills`         |
 | `"claude"`      | Claude Code      | `~/.claude/skills`         |
 | `"codex"`       | Codex            | `~/.agents/skills`         |
 | `"copilot"`     | GitHub Copilot   | `~/.agents/skills`         |
 | `"opencode"`    | OpenCode         | `~/.agents/skills`         |
-| `"goose"`       | Goose            | `~/.agents/skills`         |
 
 > **Tip:** Have the toolkit sources and want live updates? Use `links=true` - see [4.1 - Install as links instead of copies](#41---install-as-links-instead-of-copies).
 
@@ -191,6 +195,11 @@ xcopy /E /I <MBDT AI Support Location>\skills-catalog\* %USERPROFILE%\.agents\sk
 ```
 
 ---
+## Configuration and Troubleshooting
+
+Setup verification, updating and uninstalling, the full `nxp.setup.registerAgent` / `nxp.setup.registerSkills` reference, and a troubleshooting table are in [Configuration_and_Troubleshooting.md](Configuration_and_Troubleshooting.md).
+
+---
 ## MCP Tools
 
 The MCP Tools expose live discovery and configuration of NXP MBDT models - they read the installed toolbox at runtime instead of relying on hard-coded catalogs, so they stay correct as MBDT and MATLAB are upgraded.
@@ -216,6 +225,7 @@ This repository also ships an Agent Skills catalog under `skills-catalog/` for a
 | `building-mbdt-model` | Generate code, build, compile, rebuild, flash, download, program, deploy, or run on target for an MBDT Simulink model, and diagnose build / compiler / linker errors. |
 | `configuring-mbdt-blocks` | Add, read, configure, set parameters on, select a driver function for, or wire interrupts on MBDT driver blocks (Can, Adc, Dio, Pwm, Spi, Uart, I2c, Lin, Gpt, Icu, Mcl, Mem, Fee, MotorControl, FreeMASTER, Profiler, ISR handler). |
 | `editing-mbdt-board-init` | View, add, remove, enable, disable, reorder, comment, or edit component entries (Code, Header, Priority, Enabled) of the Board Initialization sequence emitted into `mbdt_board_init.c`. |
+| `inserting-mbdt-custom-code` | Add custom C source files, header search paths, inline C snippets, or custom startup calls to an NXP MBDT model via the Simulink Custom Code pane or a Custom entry in the Board Initialization sequence. |
 | `managing-mbdt-s32ds-project` | Open / launch / focus S32 Design Studio from an MBDT Simulink model (drives the S32DS *Open* pushbutton), and configure or fix the S32DS installation path (`mbdt_s32<platform>_s32ds.m`). |
 | `opening-mbdt-config-tool` | Open the external configuration tool paired with the model - S32 Configuration Tools (S32CT) or EB tresos - and navigate to a specific peripheral module. |
 | `opening-mbdt-example` | Discover, list, and copy an MBDT shipped example into a chosen folder, open its main model, and verify it loaded. |
@@ -232,7 +242,7 @@ This repository also ships an Agent Skills catalog under `skills-catalog/` for a
 | [matlab/matlab-agentic-toolkit](https://github.com/matlab/matlab-agentic-toolkit) | MathWorks MATLAB Agentic Toolkit. Provides the MCP Tools and Agent Skills that expose general MATLAB functionality to AI coding agents. |
 | [matlab/simulink-agentic-toolkit](https://github.com/matlab/simulink-agentic-toolkit) | MathWorks Simulink Agentic Toolkit. Provides the MCP Tools and Agent Skills that expose Simulink modeling and simulation to AI coding agents. The NXP MBDT AI Support extends this surface with NXP-specific blocks and configurations. |
 | [mathworks/polyspace-agentic-toolkit](https://github.com/mathworks/polyspace-agentic-toolkit) | MathWorks Polyspace Agentic Toolkit. Provides the MCP Tools and Agent Skills that expose Polyspace static analysis and code verification to AI coding agents. |
-| [NXP S32DS AI Support](https://github.com/nxp-agentic-ai/s32-tools-agentic-ai-support) | NXP companion product that orchestrates this toolkit and related NXP agentic skills across the broader NXP Tools, including configuring pins, clocks, and peripherals. |
+| [NXP S32 Design Studio AI Support](https://github.com/nxp-agentic-ai/s32-ds-ai-support) | NXP companion product that orchestrates this toolkit and related NXP agentic skills across the broader NXP Tools, including configuring pins, clocks, and peripherals. |
 
 ---
 ## Supported MBDT Platforms

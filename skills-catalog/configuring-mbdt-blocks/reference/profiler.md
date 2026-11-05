@@ -25,9 +25,9 @@ function-call subsystem, or initialize function). Cross-family
   selected unit; `off` = no ports, marker only.
 
 > **Tip.** Open the shipped example via
-> [`opening-mbdt-example`](../../../opening-mbdt-example/SKILL.md).
+> [`opening-mbdt-example`](../../opening-mbdt-example/SKILL.md).
 > Read the timer entries live via
-> [`setting-mbdt-model-params`](../../../setting-mbdt-model-params/SKILL.md)
+> [`setting-mbdt-model-params`](../../setting-mbdt-model-params/SKILL.md)
 > (group `Timers`, tag `Timers_ProfilerTimer`) -- never carry the
 > list from memory.
 
@@ -179,20 +179,22 @@ is what appears in the `.mex`.
 
 ---
 
-## 8. Guardrails
+## 8. Guardrails (Profiler-specific)
 
-- Never look for Profiler in the config tool (INV-1).
-- Never hardcode the timer source -- read `Timers_ProfilerTimer`
-  live; only pick from the entries offered on the current family.
-- Never add a Profiler init entry to `mbdt_board_init.c`; when the
-  timer is `GPT`, MBDT arms the channel itself (INV-2).
-- Every `showOut = on` block needs a paired block on the same
-  `index` earlier in execution order; a lone block yields zero
-  (INV-3).
-- Place the probes around an atomic region (atomic / function-call
-  subsystem or initialize function) -- non-atomic scoping produces
-  an incoherent delta.
-- Never set `timerName` on the block -- it is read-only, mirroring
-  `Timers_ProfilerTimer`.
-- To read the delta from FreeMASTER, give the output signal storage
-  class `ExportedGlobal` (or `Volatile`).
+Generic block rules (no stubs, no invented names, interrupts only via the
+ISR-handler block, `api_func` first, never set `text`) are in
+[`../SKILL.md`](../SKILL.md); only Profiler-specific rules follow.
+
+- **Never look for Profiler in the config tool (INV-1).**
+- **Never hardcode the timer source.** Read `Timers_ProfilerTimer` live and
+  pick only from the entries offered on the current family.
+- **Never add a Profiler init entry to `mbdt_board_init.c`.** When the timer
+  is `GPT`, MBDT arms the channel itself (INV-2).
+- **Pair every `showOut = on` block with a block on the same `index` earlier
+  in execution order (INV-3).** A lone block yields zero.
+- **Place the probes around an atomic region** (atomic / function-call
+  subsystem or initialize function). Non-atomic scoping produces an
+  incoherent delta.
+- **Never set `timerName`.** It is read-only and mirrors `Timers_ProfilerTimer`.
+- **Give the output signal the `ExportedGlobal` (or `Volatile`) storage class
+  to read the delta from FreeMASTER.**

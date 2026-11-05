@@ -8,7 +8,7 @@ cross-family (S32K3); enum labels and board-init
 symbols are verified only on S32K3.
 
 > **Tip -- start from a shipped example.** Open a shipped I2C example
-> via [`opening-mbdt-example`](../../../opening-mbdt-example/SKILL.md);
+> via [`opening-mbdt-example`](../../opening-mbdt-example/SKILL.md);
 > its `.mex` project (Pins -> FLEXIO/LPI2C, Peripherals -> I2c, Platform
 > -> NVIC for the async case) plus its model (Initialize Function,
 > Master/Slave block placement, callback subsystem) forms a coherent
@@ -120,6 +120,7 @@ If `channel.Enum = {"No channels configured"}` (or empty), route to `opening-mbd
 | `Hardware_Interrupt_Handler` | `{family}_isr_handler` | Routes the single `MBDT_I2c_Callback` into a function-call subsystem (async mode only) |
 | `FreeMASTER Config` (optional) | `{family}_fm_config` | Ships in the async example's `.pmpx` companion project |
 
+
 ---
 
 ## 4. Configuration Workflow (5 steps)
@@ -163,7 +164,7 @@ Sync mode does not require NVIC enablement.
 
 ### 4.4 Board Initialization (Simulink model)
 
-Add via [`editing-mbdt-board-init`](../../../editing-mbdt-board-init/SKILL.md):
+Add via [`editing-mbdt-board-init`](../../editing-mbdt-board-init/SKILL.md):
 
 ```
 Component : I2c
@@ -470,26 +471,27 @@ Hardware wiring (user provides with jumpers):
 
 - **FreeMASTER `.pmpx` companion project** ships with each example and plots `master_send` / `slave_recv` / `master_recv` / `slave_send` / `versionInfo`.
 
-- **Cross-family portability:** the behavioral model (the `api_func` function set discovered live, single ISR callback, master-role-implicit) is expected to hold on other MBDT families. Board-init component name may differ (S32K3 uses `I2c`; other families may use `I2c_43_LPI2C` or similar). Discover live via `get_mbdt_board_init({family})`.
+- **Cross-family portability:** the behavioral model (the `api_func` function set discovered live, single ISR callback, master-role-implicit) is expected to hold on other MBDT families. Board-init component name may differ (S32K3 uses `I2c`; other families may use `I2c_43_LPI2C` or similar). Discover live via `get_mbdt_board_init({model})`.
 
 
 ---
 
 ## 12. Guardrails (I2C-specific)
 
+Generic block rules (no stubs, no invented names, interrupts only via the
+ISR-handler block, `api_func` first, never set `text`) are in
+[`../SKILL.md`](../SKILL.md); only I2C-specific rules follow.
 
-- **Never stub I2C functions.** Do not hand-write `I2c_Init`, `I2c_SyncTransmit`, `I2c_AsyncTransmit`, `MBDT_I2c_Callback`, or any RTD function into generated C. The board-init entry (Sec.4.4) is what triggers MBDT to generate the driver code.
-
-- **Never invent channel names.** `I2cChannel_0`, `I2cChannel_1` are exact strings from the config tool. Read them from the block's live `Enum`.
-
-- **`data_direction` is only meaningful on `I2c_SyncTransmit` and `I2c_AsyncTransmit`.** On `I2c_StartListening`, `I2c_GetStatus`, `I2c_GetVersionInfo` it is silently ignored.
-
-- **`bits_slave_address_size` must match the config-tool addressing mode.** If the slave is configured for 7-bit addressing but the master's block has `bits_slave_address_size = 'on'`, the transaction will fail with an addressing error. Verify against Peripherals -> I2c.
-
-- **`I2c_StartListening` must precede any slave-side transfer.** If it is missing, the slave channel silently ignores incoming addresses. Not a build error -- a runtime silence.
-
-- **Never route an I2C interrupt through a parameter on the `I2c` block.** No `isr_*`, `callback_*` parameter exists on `{family}_i2c`. All I2C callbacks go through the `Hardware_Interrupt_Handler` block.
-
-- **Never set `text` on any `I2c` block** -- system-managed.
-
-- **When the model runs on S32K311EVB-Q100, S32K312EVB-Q172, or S32K388EVB-Q289, verify pull-up resistors before diagnosing model-side issues.** Missing pull-ups look exactly like a driver failure but the driver is fine -- the bus can't idle high. This is a hardware failure that the model cannot detect or work around.
+- **`data_direction` matters only on `I2c_SyncTransmit` and
+  `I2c_AsyncTransmit`.** It is silently ignored on `I2c_StartListening`,
+  `I2c_GetStatus`, `I2c_GetVersionInfo`.
+- **Match `bits_slave_address_size` to the config-tool addressing mode.** A
+  7-bit slave with `bits_slave_address_size = 'on'` on the master fails with
+  an addressing error; verify against Peripherals -> I2c.
+- **Call `I2c_StartListening` before any slave-side transfer.** Without it the
+  slave channel silently ignores incoming addresses -- a runtime silence, not
+  a build error.
+- **On S32K311EVB-Q100, S32K312EVB-Q172, or S32K388EVB-Q289, verify the
+  pull-up resistors before diagnosing the model.** Missing pull-ups look
+  exactly like a driver failure, and the model cannot detect or work around
+  them.

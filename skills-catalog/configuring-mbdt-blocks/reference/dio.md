@@ -5,10 +5,9 @@ Retrieval-optimized reference for AI agents configuring the DIO
 model. It describes the `Dio` block (`MaskType = {family}_dio`), the
 Pins-tool / PORT-component / DIO-component three-way relation, how a
 logical channel NAME on the block resolves to a physical pad, how the
-DIO channel VALUE (`DioChannelId`) is calculated differently on S32K3
-and other platforms, and why DIO has no `Dio_Init` and no interrupt of its own. The
-behavioral model is expected to hold cross-family
-(S32K3).
+DIO channel VALUE (`DioChannelId`) is calculated on S32K3, and why DIO
+has no `Dio_Init` and no interrupt of its own. Exact enum labels and
+board-init symbols are verified on S32K3.
 
 Read the sections in order: they walk from *what DIO is* -> *the block
 model* -> *the Pins/PORT/DIO relation in the config tool* -> *board init*
@@ -28,13 +27,13 @@ and referenced by name; later sections do not re-derive them.
   routes the pad as SIUL2 GPIO; Peripherals -> Dio names the channel and
   binds it to a DioPort) and surface only in the `.mex` (see the
   canonical tree in Sec.2.3). Channel names are application-chosen
-  (`DioLed0`, `CanController_0_EN`, `SOFTLED_1`) and must be **read live,
+  (`DioLed0`, `CanController_0_EN`) and must be **read live,
   never assumed**.
 
 - **INV-2 -- DIO has NO `Dio_Init` and no mandatory Initialize Function
   block. The pads are physically configured by `Port_Init` (the Port
-  component).** DIO is not a driver that gets initialized on its own; on
-  both families the board-init sequence contains a `Port` entry
+  component).** DIO is not a driver that gets initialized on its own; the
+  board-init sequence contains a `Port` entry
   (priority ~30) and NO `Dio` entry. If `Port_Init` is missing, or the
   pad is not muxed as SIUL2 GPIO in the Pins tool, every `Dio_*` call is a
   silent no-op -- a runtime silence, not a build error.
@@ -45,7 +44,7 @@ and referenced by name; later sections do not re-derive them.
   `Dio` block never connects to a `Hardware_Interrupt_Handler`.
 
 > **Tip -- start from a shipped example.** Open a shipped DIO example via
-> [`opening-mbdt-example`](../../../opening-mbdt-example/SKILL.md); its
+> [`opening-mbdt-example`](../../opening-mbdt-example/SKILL.md); its
 > `.mex` project (Pins -> SIUL2 GPIO pads, Peripherals -> Dio channels,
 > Peripherals -> Port for the pad setup) plus its model (a board-init
 > `Port` entry, top-level `Dio_WriteChannel` / `Dio_ReadChannel` /
@@ -123,7 +122,8 @@ Dio_WriteChannel       Dio_WriteChannelGroup   Dio_WritePort
 - **`Dio_FlipChannel`** toggles a single logical channel and returns its
   new level. Takes `channel`.
 - **`Dio_ReadPort` / `Dio_WritePort` / `Dio_MaskedWritePort`** read /
-  write a whole port (a 16-bit half-port on S32K3) in one operation. Take `port`.
+  write a whole port (a 16-bit half-port on S32K3) in one operation.
+  Take `port`.
 - **`Dio_ReadChannelGroup` / `Dio_WriteChannelGroup`** read / write a
   contiguous adjacent subset of a port defined as a channel group in the
   config tool. Take `channel_group` (reads `"No channel groups
@@ -137,11 +137,12 @@ Dio_WriteChannel       Dio_WriteChannelGroup   Dio_WritePort
 | Name | Type | Prompt | Semantics | Meaningful for |
 |---|---|---|---|---|
 | `api_func` | enum | Function | Function selector (see Sec.2.1) | All |
-| `channel` | enum | Channel | application-named logical channel (`DioLed0`, `CanController_0_EN`, `SOFTLED_1`) | `Dio_WriteChannel`, `Dio_ReadChannel`, `Dio_FlipChannel` |
+| `channel` | enum | Channel | application-named logical channel (`DioLed0`, `CanController_0_EN`) | `Dio_WriteChannel`, `Dio_ReadChannel`, `Dio_FlipChannel` |
 | `port` | enum | Port | a port handle (S32K3 16-bit half-port `PTx_H` / `PTx_L`) | `Dio_ReadPort`, `Dio_WritePort`, `Dio_MaskedWritePort` |
 | `channel_group` | enum | Channel Group | a contiguous subset of a port; reads `"No channel groups configured"` when none declared | `Dio_ReadChannelGroup`, `Dio_WriteChannelGroup` |
 | `gpioSim` | boolean | Input Simulation Enable | enable input simulation for the channel (test aid) | read functions |
 | `text` | string | *(empty)* | System-managed cache -- **never set** | Read-only |
+
 
 The parameter set is constant across `api_func`; the mask shows / enables
 only those meaningful for the selected function. Read live which are
@@ -176,10 +177,11 @@ DioConfig/                              <- the Dio driver config set
     DioPort[]                           <- one node per port
         (S32K3) PTA_H (DioPortId 1), PTB_H (3), PTC_H (5), PTD_L (6), PTE_L (8)
         DioChannel[]                    <- channels nested under a DioPort
-            Name          <- application-chosen (DioLed0, SOFTLED_1, ...)
+            Name          <- application-chosen (DioLed0, ...)
             DioChannelId  <- the RTD channel index (see Sec.10 arithmetic)
-            vGPIOSlot     <- virtual-wrapper slot (e.g. VIRTUAL_WRAPPER_PDAC0 / vGPIO1)
+            vGPIOSlot     <- virtual-wrapper slot (e.g. VIRTUAL_WRAPPER_PDAC0)
 ```
+
 
 This is the **flat channel model** (INV-1): a `channel` handle on the
 block maps to a `DioChannel` `Name` under some `DioPort`, and a `port`
@@ -241,7 +243,7 @@ leaves it on a stale hidden slot and the model is incoherent.
 DIO needs **no** ISR-handler block (INV-3) and **no** Initialize Function
 block (INV-2). Pin edge / level interrupts, if needed, are the ICU
 driver's job -- see the ICU reference, not this one. Discover exact block
-paths via `detect_mbdt_blocks({family})`.
+paths via `get_mbdt_toolbox({family}, 'blocks')`.
 
 ---
 
@@ -265,7 +267,7 @@ pin mapping via `nxp_s32ct_inspect(kind='pins')` on the `.mex`.
 ### 4.2 Peripherals -> Dio (declare the channels)
 
 Declare each logical channel (per the canonical `.mex` tree in Sec.2.3):
-give it a `Name` (`DioLed0`, `SOFTLED_1`, ...), bind it to a `DioPort`,
+give it a `Name` (`DioLed0`, ...), bind it to a `DioPort`,
 and the config tool assigns its `DioChannelId`. The **exact string
 names** you assign here are what appear in the block's `channel.Enum` /
 `port.Enum` -- case-sensitive, 1:1. Channel names are freely chosen by the
@@ -306,9 +308,9 @@ the **ICU** driver instead (separate reference).
 
 ### 4.5 Board Initialization (Simulink model)
 
-DIO has **no `Dio_Init`**. The board-init sequence on both families
+DIO has **no `Dio_Init`**. The board-init sequence
 carries a `Port` entry and NO `Dio` entry. Add / verify the `Port` entry
-via [`editing-mbdt-board-init`](../../../editing-mbdt-board-init/SKILL.md):
+via [`editing-mbdt-board-init`](../../editing-mbdt-board-init/SKILL.md):
 
 ```
 Component : Port
@@ -321,9 +323,9 @@ Code      : Port_Init(&Port_Config);
 AUTOSAR standard driver (`mode = autosar` in the `.mex`). `Port_Config`
 is emitted by the code-gen tool from Peripherals -> Port. Priority 30 is
 the default emitted for the shipped examples -- verify live via
-`get_mbdt_board_init({family})`. Confirmed: the S32K3 sequence
-(Mcu 10, BaseNXP 20, **Port 30**, Gpt 40, Adc 50, ...) contain `Port` and
-neither contains `Dio`.
+`get_mbdt_board_init({model})`. Confirmed: the S32K3 sequence
+(Mcu 10, BaseNXP 20, **Port 30**, Gpt 40, Adc 50, ...) contains `Port`
+and no `Dio`.
 
 #### Expected generated C files (DIO)
 
@@ -409,8 +411,8 @@ set `api_func`, set `channel`, wire the data port.
 
 ```
 Top-level
-   +-- Dio_WritePort        port = {PTA_H / CRS_GPIO1}   -- write a whole port at once
-   +-- Dio_ReadPort         port = {PTA_H / CRS_GPIO1}   -- read a whole port
+   +-- Dio_WritePort        port = {PTA_H}               -- write a whole port at once
+   +-- Dio_ReadPort         port = {PTA_H}               -- read a whole port
    +-- Dio_MaskedWritePort  port = {PTA_H}               -- write only masked bits
    +-- Dio_WriteChannelGroup channel_group = {group}     -- write a contiguous subset
 ```
@@ -431,8 +433,8 @@ Leave `false` for hardware reads.
 
 **DIO has none** (INV-3). There is no notification `api_func` on the
 `Dio` block, no `irqGroup = Dio`, and no ISR-handler wiring. A `Dio`
-block never connects to a `Hardware_Interrupt_Handler` /
-`ISR Handler`. Pin edge / level interrupt detection is provided by the
+block never connects to a `Hardware_Interrupt_Handler`. Pin edge / level
+interrupt detection is provided by the
 **ICU** driver, which is a separate peripheral with its own reference. If
 a task needs "interrupt on a GPIO pin", that is an ICU task, not a DIO
 task.
@@ -445,7 +447,7 @@ task.
 |---|---|---|
 | Channel logical name (application-chosen) | Peripherals -> Dio | `channel.Enum` on `Dio` block |
 | Channel-to-pad binding + `DioChannelId` | Peripherals -> Dio (+ Pins mux) | Compiled-in; not exposed on block (in `.mex` DioChannel node) |
-| Port handle (`PTx_H` / `PTx_L` / `CRS_GPIOn`) | Peripherals -> Dio (DioPort) | `port.Enum` on `Dio` block |
+| Port handle (`PTx_H` / `PTx_L`) | Peripherals -> Dio (DioPort) | `port.Enum` on `Dio` block |
 | Channel group (contiguous subset) | Peripherals -> Dio | `channel_group.Enum` on `Dio` block |
 | Pad direction / pull / drive strength | Peripherals -> Port | Compiled-in; applied by `Port_Init` (INV-2) |
 | SIUL2 GPIO pin muxing | Pins | Compiled-in; not exposed |
@@ -490,7 +492,8 @@ arithmetic.
 
 ## 10. Board-Specific Considerations
 
-The `DioChannelId` VALUE behind each channel name is computed. This is the key per-family DIO fact.
+The `DioChannelId` VALUE behind each channel name follows the S32K3
+half-port arithmetic below. This is the key DIO pad-resolution fact.
 
 ### 10.1 S32K3 -- flat SIUL2 GPIO number, half-port arithmetic
 
@@ -534,32 +537,22 @@ instance body, then apply the formula and cross-check against the Pins
   invent pin numbers or `DioChannelId` values.
 - **Channel and port labels are application-named** (INV-1). Read them
   live; do not assume a fixed naming scheme.
-- **Cross-family portability.** The behavioral model (the live-discovered
-  `api_func` set, the flat channel model, INV-1/INV-2/INV-3, pad setup by
-  `Port_Init`, no interrupt of its own) is expected to hold on
-  S32K3. Family-specific differences to discover live:
-  - the channel-value arithmetic (S32K3 half-port `32*port+pin` -- above);
-  - board-init component name (`Port`) / header (`Port.h`) -- via
-    `get_mbdt_board_init({family})`.
+- **Board-init component.** Confirm the component name (`Port`) and
+  header (`Port.h`) live via `get_mbdt_board_init({model})`.
 
 ---
 
 ## 11. Guardrails (DIO-specific)
 
-- **Never stub DIO or PORT functions.** Do not hand-write `Port_Init`,
-  `Dio_WriteChannel`, `Dio_ReadChannel`, `Dio_FlipChannel`, or any RTD
-  function into generated C. The board-init `Port` entry (Sec.4.5) is
-  what triggers MBDT to generate the driver code (INV-2).
-- **Never expect a `Dio_Init`** (INV-2). DIO has no init driver; the pad
-  is configured by `Port_Init`. A missing `Port` board-init entry -- not
-  a missing `Dio_Init` -- is the cause of a silently dead pin.
-- **Never invent channel / port names or `DioChannelId` values**
-  (INV-1). Channel and port names are application-chosen and vary per
-  project; read them from the block's live enums and the `Dio` instance
-  body.
-- **Compute the channel value with the right family formula** (Sec.10).
-  S32K3 uses `32*portIndex + (half-port base + DioChannelId)`.
-- **Never look for a DIO interrupt** (INV-3). DIO has no notification and
-  no ISR routing; pin edge / level interrupts are the ICU driver's job.
-- **Set `api_func` first**, before any resource enum.
-- **Never set `text` on any `Dio` block** -- system-managed.
+Generic block rules (no stubs, no invented names, interrupts only via the
+ISR-handler block, `api_func` first, never set `text`) are in
+[`../SKILL.md`](../SKILL.md); only DIO-specific rules follow.
+
+- **Never expect a `Dio_Init` (INV-2).** DIO has no init driver; the pad is
+  configured by `Port_Init`, so a missing `Port` board-init entry -- not a
+  missing `Dio_Init` -- is the cause of a silently dead pin.
+- **Compute the channel value with the half-port formula (Sec.10).** S32K3
+  uses `32*portIndex + (half-port base + DioChannelId)`; never add the
+  base twice or treat `DioChannelId` as the flat GPIO number.
+- **Never look for a DIO interrupt (INV-3).** DIO has no notification and no
+  ISR routing; pin edge / level interrupts are the ICU driver's job.
